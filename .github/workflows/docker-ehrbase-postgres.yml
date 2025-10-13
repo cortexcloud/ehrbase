@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       postgres-version:
-        description: 'Version of Postgres to build (like: 16.2)'
+        description: 'Version of Postgres to build (like: 16.2 or 17)'
         required: true
-        default: '16.2'
+        default: '17'
         type: string
       push-image:
         description: 'Push the resulting image to dockerhub'
