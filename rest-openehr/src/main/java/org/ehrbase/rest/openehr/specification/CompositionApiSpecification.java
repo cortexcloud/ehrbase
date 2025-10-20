@@ -103,4 +103,20 @@ public interface CompositionApiSpecification {
                                             allowableValues = {"JSON", "XML", "STRUCTURED", "FLAT"}))
                     String format,
             String versionAtTime);
+
+    @Operation(
+            summary = "Validate composition"
+    )
+    ResponseEntity validateComposition(
+            String contentType,
+            String accept,
+            String templateId,
+            @Parameter(
+                    description = "Composition format",
+                    schema =
+                    @Schema(
+                            type = "string",
+                            allowableValues = {"JSON", "XML", "STRUCTURED", "FLAT"}))
+            String format,
+            String composition);
 }

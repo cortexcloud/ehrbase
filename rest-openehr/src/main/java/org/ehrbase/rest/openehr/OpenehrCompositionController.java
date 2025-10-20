@@ -151,6 +151,26 @@ public class OpenehrCompositionController extends BaseController implements Comp
                 .orElse(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build());
     }
 
+
+    @PostMapping(
+            value = "/composition/validate"
+    )
+    @Override
+    public ResponseEntity validateComposition(
+            @RequestHeader(value = CONTENT_TYPE) String contentType,
+            @RequestHeader(value = ACCEPT, required = false) String accept,
+            @RequestParam(value = "templateId", required = false) String templateId,
+            @RequestParam(value = "format", required = false) String format,
+            @RequestBody String composition
+    ) {
+        var requestRepresentation = extractCompositionRepresentation(contentType, format);
+        var compoObj = compositionService.buildComposition(composition, requestRepresentation.format, templateId);
+
+        compositionService.validateComposition(compoObj);
+
+        return ResponseEntity.noContent().build();
+    }
+
     @PutMapping(
             value = "/{ehr_id}/composition/{versioned_object_uid}",
             consumes = {

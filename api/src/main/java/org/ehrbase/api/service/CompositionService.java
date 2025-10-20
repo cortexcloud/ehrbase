@@ -146,4 +146,11 @@ public interface CompositionService extends VersionedObjectService<Composition, 
      * @return EHR UID for the given Composition
      */
     Optional<UUID> getEhrIdForComposition(UUID compositionId);
+
+    /**
+     * Validate composition
+     *
+     * @param composition Composition dto to validate.
+     */
+    void validateComposition(Composition composition);
 }

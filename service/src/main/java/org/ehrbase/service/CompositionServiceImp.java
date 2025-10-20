@@ -505,4 +505,19 @@ public class CompositionServiceImp implements CompositionService {
 
         return compositionRepository.getOriginalVersionComposition(ehrUid, versionedObjectUid, version);
     }
+
+    @Override
+    public void validateComposition(Composition composition) {
+        try {
+            validationService.check(composition);
+        } catch (UnprocessableEntityException | ValidationException | BadGatewayException e) {
+            throw e; // forward exception
+        } catch (org.ehrbase.openehr.sdk.validation.ValidationException e) {
+            throw new UnprocessableEntityException(e.getMessage());
+        } catch (IllegalArgumentException e) {
+            throw new ValidationException(e);
+        } catch (Exception e) {
+            throw new InternalServerException(e);
+        }
+    }
 }
