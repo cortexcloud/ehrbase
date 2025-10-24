@@ -22,6 +22,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.util.Map;
 import org.springframework.http.ResponseEntity;
 
 @Tag(name = "COMPOSITION")
@@ -34,7 +35,7 @@ public interface CompositionApiSpecification {
                     @ExternalDocumentation(
                             url =
                                     "https://specifications.openehr.org/releases/ITS-REST/latest/ehr.html#composition-composition-post"))
-    ResponseEntity createComposition(
+        ResponseEntity<?> createComposition(
             String openehrVersion,
             String openehrAuditDetails,
             String contentType,
@@ -57,7 +58,7 @@ public interface CompositionApiSpecification {
                     @ExternalDocumentation(
                             url =
                                     "https://specifications.openehr.org/releases/ITS-REST/latest/ehr.html#composition-composition-put"))
-    ResponseEntity updateComposition(
+        ResponseEntity<?> updateComposition(
             String openehrVersion,
             String openehrAuditDetails,
             String contentType,
@@ -82,7 +83,7 @@ public interface CompositionApiSpecification {
                     @ExternalDocumentation(
                             url =
                                     "https://specifications.openehr.org/releases/ITS-REST/latest/ehr.html#composition-composition-delete"))
-    ResponseEntity deleteComposition(
+        ResponseEntity<?> deleteComposition(
             String openehrVersion, String openehrAuditDetails, String ehrIdString, String precedingVersionUid);
 
     @Operation(
@@ -91,7 +92,7 @@ public interface CompositionApiSpecification {
                     @ExternalDocumentation(
                             url =
                                     "https://specifications.openehr.org/releases/ITS-REST/latest/ehr.html#composition-composition-get"))
-    ResponseEntity getComposition(
+        ResponseEntity<?> getComposition(
             String accept,
             String ehrIdString,
             String versionedObjectUid,
@@ -107,9 +108,26 @@ public interface CompositionApiSpecification {
     @Operation(
             summary = "Validate composition"
     )
-    ResponseEntity validateComposition(
+    ResponseEntity<Void> validateComposition(
             String contentType,
             String accept,
+            String templateId,
+            @Parameter(
+                    description = "Composition format",
+                    schema =
+                    @Schema(
+                            type = "string",
+                            allowableValues = {"JSON", "XML", "STRUCTURED", "FLAT"}))
+            String format,
+            String composition);
+
+    @Operation(
+            summary = "Preview uncommited composition representing database records"
+    )
+        ResponseEntity<Map<String, Object>> previewComposition(
+            String contentType,
+            String accept,
+            String ehrIdString,
             String templateId,
             @Parameter(
                     description = "Composition format",

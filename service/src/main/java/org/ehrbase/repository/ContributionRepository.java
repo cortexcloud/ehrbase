@@ -98,31 +98,16 @@ public class ContributionRepository {
      */
     @Transactional
     public UUID createDefaultAudit(ContributionChangeType contributionChangeType, AuditDetailsTargetType targetType) {
-        AuditDetailsRecord auditDetailsRecord = context.newRecord(AuditDetails.AUDIT_DETAILS);
-
-        auditDetailsRecord.setId(UuidGenerator.randomUUID());
-        auditDetailsRecord.setTimeCommitted(timeProvider.getNow());
-        auditDetailsRecord.setTargetType(targetType.getAlias());
-
-        auditDetailsRecord.setCommitter(null);
-        auditDetailsRecord.setUserId(userService.getCurrentUserId());
-        auditDetailsRecord.setChangeType(contributionChangeType);
-
+        AuditDetailsRecord auditDetailsRecord = newAuditDetailsRecord(contributionChangeType, targetType);
         auditDetailsRecord.store();
+
         return auditDetailsRecord.getId();
     }
 
     @Transactional
     public UUID createContribution(
             UUID ehrId, UUID contributionUuid, ContributionDataType contributionType, UUID auditDetailsRecordId) {
-
-        ContributionRecord contributionRecord = context.newRecord(Contribution.CONTRIBUTION);
-
-        contributionRecord.setEhrId(ehrId);
-        contributionRecord.setId(contributionUuid);
-        contributionRecord.setContributionType(contributionType);
-        contributionRecord.setHasAudit(auditDetailsRecordId);
-
+        ContributionRecord contributionRecord = newContributionRecord(ehrId, contributionUuid, contributionType, auditDetailsRecordId);
         contributionRecord.store();
 
         return contributionRecord.getId();
@@ -227,5 +212,30 @@ public class ContributionRepository {
         DvDateTime time = new DvDateTime(auditDetailsRecord.getTimeCommitted());
         auditDetails.setTimeCommitted(time);
         return auditDetails;
+    }
+
+    public AuditDetailsRecord newAuditDetailsRecord(ContributionChangeType contributionChangeType, AuditDetailsTargetType targetType) {
+        AuditDetailsRecord auditDetailsRecord = context.newRecord(AuditDetails.AUDIT_DETAILS);
+
+        auditDetailsRecord.setId(UuidGenerator.randomUUID());
+        auditDetailsRecord.setTimeCommitted(timeProvider.getNow());
+        auditDetailsRecord.setTargetType(targetType.getAlias());
+
+        auditDetailsRecord.setCommitter(null);
+        auditDetailsRecord.setUserId(userService.getCurrentUserId());
+        auditDetailsRecord.setChangeType(contributionChangeType);
+
+        return auditDetailsRecord;
+    }
+
+    public ContributionRecord newContributionRecord(UUID ehrId, UUID contributionUuid, ContributionDataType contributionType, UUID auditDetailsRecordId) {
+        ContributionRecord contributionRecord = context.newRecord(Contribution.CONTRIBUTION);
+
+        contributionRecord.setEhrId(ehrId);
+        contributionRecord.setId(contributionUuid);
+        contributionRecord.setContributionType(contributionType);
+        contributionRecord.setHasAudit(auditDetailsRecordId);
+
+        return contributionRecord;
     }
 }

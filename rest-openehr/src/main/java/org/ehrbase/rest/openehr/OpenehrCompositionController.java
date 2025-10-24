@@ -31,6 +31,7 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -50,7 +51,6 @@ import org.ehrbase.rest.openehr.format.CompositionRepresentation;
 import org.ehrbase.rest.openehr.format.OpenEHRMediaType;
 import org.ehrbase.rest.openehr.specification.CompositionApiSpecification;
 import org.ehrbase.rest.util.InternalResponse;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -87,7 +87,6 @@ public class OpenehrCompositionController extends BaseController implements Comp
 
     private final SystemService systemService;
 
-    @Autowired
     public OpenehrCompositionController(CompositionService compositionService, SystemService systemService) {
         this.compositionService = Objects.requireNonNull(compositionService);
         this.systemService = systemService;
@@ -103,7 +102,7 @@ public class OpenehrCompositionController extends BaseController implements Comp
             })
     @ResponseStatus(value = HttpStatus.CREATED)
     @Override
-    public ResponseEntity createComposition(
+    public ResponseEntity<?> createComposition(
             @RequestHeader(value = "openEHR-VERSION", required = false) String openehrVersion,
             @RequestHeader(value = "openEHR-AUDIT_DETAILS", required = false) String openehrAuditDetails,
             @RequestHeader(value = CONTENT_TYPE) String contentType,
@@ -152,11 +151,9 @@ public class OpenehrCompositionController extends BaseController implements Comp
     }
 
 
-    @PostMapping(
-            value = "/composition/validate"
-    )
+    @PostMapping(value = "/composition/validate")
     @Override
-    public ResponseEntity validateComposition(
+    public ResponseEntity<Void> validateComposition(
             @RequestHeader(value = CONTENT_TYPE) String contentType,
             @RequestHeader(value = ACCEPT, required = false) String accept,
             @RequestParam(value = "templateId", required = false) String templateId,
@@ -171,6 +168,25 @@ public class OpenehrCompositionController extends BaseController implements Comp
         return ResponseEntity.noContent().build();
     }
 
+    @PostMapping(value = "{ehr_id}/composition/preview")
+    @Override
+        public ResponseEntity<Map<String, Object>> getCompDataRecordStream(
+            @RequestHeader(value = CONTENT_TYPE) String contentType,
+            @RequestHeader(value = ACCEPT, required = false) String accept,
+            @PathVariable(value = "ehr_id") String ehrIdString,
+            @RequestParam(value = "templateId", required = false) String templateId,
+            @RequestParam(value = "format", required = false) String format,
+            @RequestBody String composition
+    ) {
+        var ehrId = getEhrUuid(ehrIdString);
+        var requestRepresentation = extractCompositionRepresentation(contentType, format);
+        var compoObj = compositionService.buildComposition(composition, requestRepresentation.format, templateId);
+
+        Map<String, Object> compDataPreview = compositionService.previewCompDataRecords(ehrId, compoObj);
+
+        return ResponseEntity.ok(compDataPreview);
+    }
+
     @PutMapping(
             value = "/{ehr_id}/composition/{versioned_object_uid}",
             consumes = {
@@ -180,7 +196,7 @@ public class OpenehrCompositionController extends BaseController implements Comp
                 OpenEHRMediaType.APPLICATION_WT_STRUCTURED_SCHEMA_JSON_VALUE
             })
     @Override
-    public ResponseEntity updateComposition(
+    public ResponseEntity<?> updateComposition(
             String openehrVersion,
             @RequestHeader(value = "openEHR-AUDIT_DETAILS", required = false) String openehrAuditDetails,
             @RequestHeader(value = CONTENT_TYPE, required = false) String contentType,
@@ -256,7 +272,7 @@ public class OpenehrCompositionController extends BaseController implements Comp
     @DeleteMapping("/{ehr_id}/composition/{preceding_version_uid}")
     @ResponseStatus(value = HttpStatus.NO_CONTENT)
     @Override
-    public ResponseEntity deleteComposition(
+    public ResponseEntity<?> deleteComposition(
             @RequestHeader(value = "openEHR-VERSION", required = false) String openehrVersion,
             @RequestHeader(value = "openEHR-AUDIT_DETAILS", required = false) String openehrAuditDetails,
             @PathVariable(value = "ehr_id") String ehrIdString,
@@ -321,7 +337,7 @@ public class OpenehrCompositionController extends BaseController implements Comp
      */
     @GetMapping("/{ehr_id}/composition/{versioned_object_uid}")
     @Override
-    public ResponseEntity getComposition(
+    public ResponseEntity<?> getComposition(
             @RequestHeader(value = ACCEPT, required = false) String accept,
             @PathVariable(value = "ehr_id") String ehrIdString,
             @PathVariable(value = "versioned_object_uid") String versionedObjectUid,
