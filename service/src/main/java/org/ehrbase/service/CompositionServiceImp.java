@@ -477,10 +477,10 @@ public class CompositionServiceImp implements CompositionService {
             .collect(Collectors.toList());
 
     Map<String, Object> response = new LinkedHashMap<>();
-    response.put("VR", versionPayload);
-    response.put("CR", contributionPayload);
-    response.put("AR", auditPayload);
-    response.put("DR", dataPayload);
+    response.put("comp_version", versionPayload);
+    response.put("contribution", contributionPayload);
+    response.put("audit_details", auditPayload);
+    response.put("comp_data", dataPayload);
     return response;
     }
 

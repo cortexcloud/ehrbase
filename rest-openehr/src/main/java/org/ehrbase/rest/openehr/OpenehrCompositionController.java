@@ -170,7 +170,7 @@ public class OpenehrCompositionController extends BaseController implements Comp
 
     @PostMapping(value = "{ehr_id}/composition/preview")
     @Override
-        public ResponseEntity<Map<String, Object>> getCompDataRecordStream(
+        public ResponseEntity<Map<String, Object>> previewComposition(
             @RequestHeader(value = CONTENT_TYPE) String contentType,
             @RequestHeader(value = ACCEPT, required = false) String accept,
             @PathVariable(value = "ehr_id") String ehrIdString,
