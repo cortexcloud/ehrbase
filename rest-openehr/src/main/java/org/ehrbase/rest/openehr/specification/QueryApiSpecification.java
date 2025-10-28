@@ -19,9 +19,12 @@ package org.ehrbase.rest.openehr.specification;
 
 import io.swagger.v3.oas.annotations.ExternalDocumentation;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.Map;
 import org.ehrbase.openehr.sdk.response.dto.QueryResponseData;
+import org.ehrbase.rest.openehr.dto.CompositionQueryResponse;
 import org.springframework.http.ResponseEntity;
 
 /**
@@ -59,6 +62,23 @@ public interface QueryApiSpecification {
                                     "https://specifications.openehr.org/releases/ITS-REST/latest/query.html#query-execute-query-post"))
     ResponseEntity<QueryResponseData> executeAdHocQuery(
             Map<String, Object> queryRequest, String accept, String contentType);
+
+    /**
+     * Execute ad-hoc (non-stored) AQL composition query.
+     */
+    @Operation(
+            summary = "Execute ad-hoc (non-stored) AQL composition query",
+            externalDocs =
+                    @ExternalDocumentation(
+                            url =
+                                    "https://specifications.openehr.org/releases/ITS-REST/latest/query.html#query-execute-query-post"))
+    ResponseEntity<CompositionQueryResponse> executeCompositionQuery(
+            Map<String, Object> queryRequest, @Parameter(
+                    description = "Composition format",
+                    schema =
+                    @Schema(
+                            type = "string",
+                            allowableValues = {"JSON", "STRUCTURED", "FLAT"})) String format, String accept, String contentType);
 
     /**
      * Execute stored query.
