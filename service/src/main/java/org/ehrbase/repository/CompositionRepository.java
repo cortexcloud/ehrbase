@@ -37,12 +37,16 @@ import java.util.UUID;
 import org.ehrbase.api.knowledge.KnowledgeCacheService;
 import org.ehrbase.api.service.SystemService;
 import org.ehrbase.jooq.pg.enums.ContributionChangeType;
+import org.ehrbase.jooq.pg.enums.ContributionDataType;
+import org.ehrbase.jooq.pg.tables.records.AuditDetailsRecord;
 import org.ehrbase.jooq.pg.tables.records.CompDataHistoryRecord;
 import org.ehrbase.jooq.pg.tables.records.CompDataRecord;
 import org.ehrbase.jooq.pg.tables.records.CompVersionHistoryRecord;
 import org.ehrbase.jooq.pg.tables.records.CompVersionRecord;
+import org.ehrbase.jooq.pg.tables.records.ContributionRecord;
 import org.ehrbase.openehr.aqlengine.asl.model.AslRmTypeAndConcept;
 import org.ehrbase.service.TimeProvider;
+import org.ehrbase.util.UuidGenerator;
 import org.jooq.Condition;
 import org.jooq.DSLContext;
 import org.jooq.Record1;
@@ -110,6 +114,31 @@ public class CompositionRepository
                     r.setRootConcept(rootConcept);
                 },
                 (n, r) -> {});
+    }
+
+    public VersionCommitPreview previewVersionData(UUID ehrId, Composition composition) {
+        // TODO: should get input from user to identify change type, will support modification.
+        ContributionChangeType changeType = ContributionChangeType.creation;
+
+        // Create uncommited audit detail record for contribution
+        AuditDetailsRecord contributionAudit = contributionRepository.newAuditDetailsRecord(
+                changeType, AuditDetailsTargetType.CONTRIBUTION);
+        // Create uncommited contribution record
+        ContributionRecord contributionRecord = contributionRepository.newContributionRecord(
+                ehrId, UuidGenerator.randomUUID(), ContributionDataType.composition, contributionAudit.getId());
+        // Create uncommited audit record for composition
+        AuditDetailsRecord compositionAudit = contributionRepository.newAuditDetailsRecord(
+                changeType, AuditDetailsTargetType.COMPOSITION);
+        // Construct composition to db record representation
+        VersionDataDbRecord versionData = VersionDataDbRecord.toRecords(
+                ehrId,
+                composition,
+                contributionRecord.getId(),
+                compositionAudit.getId(),
+                timeProvider.getNow(),
+                context);
+        // Return all uncommited records
+        return new VersionCommitPreview(versionData, contributionRecord, List.of(contributionAudit, compositionAudit));
     }
 
     @Transactional

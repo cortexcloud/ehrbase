@@ -22,6 +22,7 @@ import com.nedap.archie.rm.composition.Composition;
 import com.nedap.archie.rm.ehr.VersionedComposition;
 import com.nedap.archie.rm.generic.RevisionHistory;
 import java.time.OffsetDateTime;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.ehrbase.api.exception.InternalServerException;
@@ -146,4 +147,21 @@ public interface CompositionService extends VersionedObjectService<Composition, 
      * @return EHR UID for the given Composition
      */
     Optional<UUID> getEhrIdForComposition(UUID compositionId);
+
+    /**
+     * Validate composition
+     *
+     * @param composition Composition dto to validate.
+     */
+    void validateComposition(Composition composition);
+
+    /**
+     * Generates the {@code comp_version} (VR), {@code contribution} (CR), {@code audit_details} (AR) and {@code comp_data} (DR) payload that would be stored when committing
+     * the supplied composition.
+     *
+     * @param ehrId       owning EHR identifier
+     * @param composition composition instance to evaluate
+     * @return preview payload with VR metadata and DR entries mirroring stored rows
+     */
+    Map<String, Object> previewCompDataRecords(UUID ehrId, Composition composition);
 }

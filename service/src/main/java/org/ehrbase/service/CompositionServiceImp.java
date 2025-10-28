@@ -32,10 +32,13 @@ import com.nedap.archie.rm.support.identification.ObjectVersionId;
 import com.nedap.archie.rm.support.identification.UIDBasedId;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.ehrbase.api.dto.experimental.ItemTagDto.ItemTagRMType;
 import org.ehrbase.api.exception.BadGatewayException;
 import org.ehrbase.api.exception.InternalServerException;
@@ -49,6 +52,10 @@ import org.ehrbase.api.service.CompositionService;
 import org.ehrbase.api.service.EhrService;
 import org.ehrbase.api.service.SystemService;
 import org.ehrbase.api.service.ValidationService;
+import org.ehrbase.jooq.pg.tables.records.AuditDetailsRecord;
+import org.ehrbase.jooq.pg.tables.records.ContributionRecord;
+import org.ehrbase.openehr.dbformat.StructureNode;
+import org.ehrbase.openehr.dbformat.VersionedObjectDataStructure;
 import org.ehrbase.openehr.sdk.response.dto.ehrscape.CompositionDto;
 import org.ehrbase.openehr.sdk.response.dto.ehrscape.CompositionFormat;
 import org.ehrbase.openehr.sdk.response.dto.ehrscape.StructuredString;
@@ -60,6 +67,8 @@ import org.ehrbase.openehr.sdk.serialisation.xmlencoding.CanonicalXML;
 import org.ehrbase.openehr.sdk.webtemplate.model.WebTemplate;
 import org.ehrbase.openehr.sdk.webtemplate.templateprovider.TemplateProvider;
 import org.ehrbase.repository.CompositionRepository;
+import org.ehrbase.repository.VersionCommitPreview;
+import org.ehrbase.repository.VersionDataDbRecord;
 import org.ehrbase.repository.experimental.ItemTagRepository;
 import org.ehrbase.util.UuidGenerator;
 import org.openehr.schemas.v1.OPERATIONALTEMPLATE;
@@ -399,6 +408,82 @@ public class CompositionServiceImp implements CompositionService {
         };
     }
 
+    // TODO: Refactor response dto to follow project practice using mapper or something
+    @Override
+    public Map<String, Object> previewCompDataRecords(UUID ehrId, Composition composition) {
+    validateComposition(composition);
+
+    composition.setUid(checkOrConstructObjectVersionId(composition.getUid()));
+
+    VersionCommitPreview preview = compositionRepository.previewVersionData(ehrId, composition);
+    VersionDataDbRecord versionData = preview.versionData();
+
+    var versionRecord = versionData.versionRecord();
+    Map<String, Object> versionPayload = new LinkedHashMap<>();
+
+    String templateId = Optional.ofNullable(composition.getArchetypeDetails())
+        .map(details -> details.getTemplateId().getValue())
+        .orElseThrow(() -> new ValidationException("Composition missing template id"));
+    UUID templateUuid = knowledgeCacheService.findUuidByTemplateId(templateId)
+        .orElseThrow(() -> new ValidationException("Unknown or missing template %s".formatted(templateId)));
+
+    versionPayload.put("ehr_id", versionRecord.getEhrId());
+    versionPayload.put("vo_id", versionRecord.getVoId());
+    versionPayload.put("sys_version", versionRecord.getSysVersion());
+    versionPayload.put("sys_period_lower", versionRecord.getSysPeriodLower());
+    versionPayload.put("contribution_id", versionRecord.getContributionId());
+    versionPayload.put("audit_id", versionRecord.getAuditId());
+    versionPayload.put("template_id", templateUuid);
+
+    List<Map<String, Object>> dataPayload = versionData.dataRecords().get()
+        .map(entry -> {
+            StructureNode node = entry.getLeft();
+            var dataRecord = entry.getRight();
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("vo_id", dataRecord.getVoId());
+            data.put("num", dataRecord.getNum());
+            data.put("citem_num", dataRecord.getCitemNum());
+            data.put("rm_entity", dataRecord.getRmEntity());
+            data.put("entity_concept", dataRecord.getEntityConcept());
+            data.put("entity_name", dataRecord.getEntityName());
+            data.put("entity_attribute", dataRecord.getEntityAttribute());
+            data.put("entity_idx", dataRecord.getEntityIdx());
+            data.put("entity_idx_len", dataRecord.getEntityIdxLen());
+            data.put("data", VersionedObjectDataStructure.applyRmAliases(node.getJsonNode()));
+            data.put("parent_num", dataRecord.getParentNum());
+            data.put("num_cap", dataRecord.getNumCap());
+            return data;
+        })
+        .collect(Collectors.toList());
+
+    String rootConcept = dataPayload.stream()
+        .map(entry -> (String) entry.get("entity_concept"))
+        .filter(Objects::nonNull)
+        .findFirst()
+        .orElseThrow(() -> new InternalServerException("Unable to determine root concept"));
+    versionPayload.put("root_concept", rootConcept);
+
+    ContributionRecord contributionRecord = preview.contributionRecord();
+    Map<String, Object> contributionPayload = new LinkedHashMap<>();
+    contributionRecord.intoMap().forEach(contributionPayload::put);
+
+    List<Map<String, Object>> auditPayload = preview.auditRecords().stream()
+            .map(AuditDetailsRecord::intoMap)
+            .map(map -> {
+                Map<String, Object> copy = new LinkedHashMap<>();
+                map.forEach(copy::put);
+                return copy;
+            })
+            .collect(Collectors.toList());
+
+    Map<String, Object> response = new LinkedHashMap<>();
+    response.put("comp_version", versionPayload);
+    response.put("contribution", contributionPayload);
+    response.put("audit_details", auditPayload);
+    response.put("comp_data", dataPayload);
+    return response;
+    }
+
     @Override
     public int getLastVersionNumber(UUID ehrId, UUID compositionId) {
         Optional<Integer> versionNumber;
@@ -504,5 +589,20 @@ public class CompositionServiceImp implements CompositionService {
             UUID ehrUid, UUID versionedObjectUid, int version) {
 
         return compositionRepository.getOriginalVersionComposition(ehrUid, versionedObjectUid, version);
+    }
+
+    @Override
+    public void validateComposition(Composition composition) {
+        try {
+            validationService.check(composition);
+        } catch (UnprocessableEntityException | ValidationException | BadGatewayException e) {
+            throw e; // forward exception
+        } catch (org.ehrbase.openehr.sdk.validation.ValidationException e) {
+            throw new UnprocessableEntityException(e.getMessage());
+        } catch (IllegalArgumentException e) {
+            throw new ValidationException(e);
+        } catch (Exception e) {
+            throw new InternalServerException(e);
+        }
     }
 }
