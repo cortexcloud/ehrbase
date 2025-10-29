@@ -141,6 +141,7 @@
             <systemPropertyVariables>
                 <user.language>en</user.language>
                 <user.region>US</user.region>
+                <net.bytebuddy.experimental>true</net.bytebuddy.experimental>
             </systemPropertyVariables>
           <includes>
             <include>**/*Test.java</include>
