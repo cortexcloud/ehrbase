@@ -35,11 +35,11 @@ jobs:
           path: ./application/target/
 
       # Docker registry login
-      - name: Login into registry ${{ vars.MAIN_REGISTRY }}
+      - name: Login into registry ${{ secrets.MAIN_REGISTRY }}
         uses: azure/docker-login@v1
         with:
-          login-server: ${{ vars.MAIN_REGISTRY }}
-          username: ${{ vars.MAIN_REGISTRY_USERNAME }}
+          login-server: ${{ secrets.MAIN_REGISTRY }}
+          username: ${{ secrets.MAIN_REGISTRY_USERNAME }}
           password: ${{ secrets.MAIN_REGISTRY_PASSWORD }}
 
       # setup qemu for multi arch
