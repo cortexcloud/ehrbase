@@ -94,7 +94,7 @@ jobs:
 
   docker-build-push:
     name: Docker
-    uses: ./.github/workflows/job-docker-build-push.yml
+    uses: ./.github/workflows/cortex-build-push.yml
     secrets: inherit
     if: ${{ github.actor != 'dependabot[bot]' }}
     needs: [
