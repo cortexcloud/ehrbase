@@ -406,12 +406,18 @@ public class OpenehrQueryController extends BaseController implements QueryApiSp
             throw new InvalidApiParameterException("Unable to determine template id for composition result.");
         }
 
+        UUID ehrId = resolveEhrId(compositionId);
+        if (ehrId == null) {
+            throw new InvalidApiParameterException("Unable to determine EHR id for composition result.");
+        }
+
         CompositionDto dto = new CompositionDto(composition, templateId, compositionId, null);
         StructuredString serialized = compositionService.serialize(dto, representation.format);
 
     Object content = deserializeCompositionContent(serialized, representation);
 
     return new CompositionQueryResponse.CompositionRow(
+                ehrId,
         versionUid,
         version,
         templateId,
@@ -454,6 +460,14 @@ public class OpenehrQueryController extends BaseController implements QueryApiSp
         }
 
         return templateId;
+    }
+
+    private UUID resolveEhrId(UUID compositionId) {
+        if (compositionId == null) {
+            return null;
+        }
+
+        return compositionService.getEhrIdForComposition(compositionId).orElse(null);
     }
 
     private Object deserializeCompositionContent(
