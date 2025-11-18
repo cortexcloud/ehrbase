@@ -38,6 +38,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import org.ehrbase.api.dto.AqlQueryContext;
 import org.ehrbase.api.dto.AqlQueryRequest;
@@ -277,12 +278,14 @@ public class OpenehrQueryControllerTest {
 
         UUID compositionId = UUID.randomUUID();
         ObjectVersionId versionId = new ObjectVersionId(compositionId + "::ehrbase::1");
+        UUID ehrId = UUID.randomUUID();
         String alias = "comp";
         String templateId = "test-template";
 
         Composition composition = mock(Composition.class);
         doReturn(versionId).when(composition).getUid();
         doReturn(templateId).when(mockCompositionService).retrieveTemplateId(compositionId);
+        doReturn(Optional.of(ehrId)).when(mockCompositionService).getEhrIdForComposition(compositionId);
 
         ResultHolder holder = new ResultHolder();
         holder.putResult(alias, composition);
@@ -308,6 +311,7 @@ public class OpenehrQueryControllerTest {
         assertThat(body.compositions()).hasSize(1);
 
         CompositionQueryResponse.CompositionRow row = body.compositions().getFirst();
+        assertEquals(ehrId, row.ehrId());
         assertEquals(versionId.getValue(), row.compositionUid());
         assertEquals(Integer.valueOf(1), row.version());
         assertEquals(templateId, row.templateId());
@@ -319,6 +323,7 @@ public class OpenehrQueryControllerTest {
 
         verify(mockCompositionService).serialize(any(), eq(CompositionFormat.JSON));
         verify(mockCompositionService).retrieveTemplateId(compositionId);
+        verify(mockCompositionService).getEhrIdForComposition(compositionId);
     }
 
         @Test
@@ -327,11 +332,13 @@ public class OpenehrQueryControllerTest {
 
                 UUID compositionId = UUID.randomUUID();
                 ObjectVersionId versionId = new ObjectVersionId(compositionId + "::ehrbase::1");
+                UUID ehrId = UUID.randomUUID();
                 String templateId = "test-template";
 
                 Composition composition = mock(Composition.class);
                 doReturn(versionId).when(composition).getUid();
                 doReturn(templateId).when(mockCompositionService).retrieveTemplateId(compositionId);
+                doReturn(Optional.of(ehrId)).when(mockCompositionService).getEhrIdForComposition(compositionId);
 
                 ResultHolder holder = new ResultHolder();
                 holder.putResult("alias", composition);
@@ -351,6 +358,7 @@ public class OpenehrQueryControllerTest {
                 CompositionQueryResponse body = response.getBody();
                 assertNotNull(body);
                 assertThat(body.compositions()).singleElement().satisfies(row -> {
+                                assertThat(row.ehrId()).isEqualTo(ehrId);
                         assertThat(row.content()).isEqualTo(serialized.getValue());
                         assertThat(row.format()).isEqualTo("XML");
                 });

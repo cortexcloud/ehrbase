@@ -1,6 +1,7 @@
 package org.ehrbase.rest.openehr.dto;
 
 import java.util.List;
+import java.util.UUID;
 import org.ehrbase.openehr.sdk.response.dto.MetaData;
 
 /**
@@ -10,6 +11,7 @@ public record CompositionQueryResponse(
         MetaData meta, String query, List<CompositionRow> compositions) {
 
     public record CompositionRow(
+            UUID ehrId,
             String compositionUid,
             Integer version,
             String templateId,
