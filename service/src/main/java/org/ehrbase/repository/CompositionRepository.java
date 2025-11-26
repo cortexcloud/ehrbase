@@ -117,18 +117,23 @@ public class CompositionRepository
     }
 
     public VersionCommitPreview previewVersionData(UUID ehrId, Composition composition) {
-        // TODO: should get input from user to identify change type, will support modification.
-        ContributionChangeType changeType = ContributionChangeType.creation;
+        return previewVersionData(ehrId, composition, ContributionChangeType.creation);
+    }
+
+    public VersionCommitPreview previewVersionData(
+            UUID ehrId, Composition composition, ContributionChangeType changeType) {
+        ContributionChangeType effectiveChangeType =
+                Optional.ofNullable(changeType).orElse(ContributionChangeType.creation);
 
         // Create uncommited audit detail record for contribution
         AuditDetailsRecord contributionAudit = contributionRepository.newAuditDetailsRecord(
-                changeType, AuditDetailsTargetType.CONTRIBUTION);
+                effectiveChangeType, AuditDetailsTargetType.CONTRIBUTION);
         // Create uncommited contribution record
         ContributionRecord contributionRecord = contributionRepository.newContributionRecord(
                 ehrId, UuidGenerator.randomUUID(), ContributionDataType.composition, contributionAudit.getId());
         // Create uncommited audit record for composition
         AuditDetailsRecord compositionAudit = contributionRepository.newAuditDetailsRecord(
-                changeType, AuditDetailsTargetType.COMPOSITION);
+                effectiveChangeType, AuditDetailsTargetType.COMPOSITION);
         // Construct composition to db record representation
         VersionDataDbRecord versionData = VersionDataDbRecord.toRecords(
                 ehrId,

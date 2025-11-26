@@ -137,4 +137,23 @@ public interface CompositionApiSpecification {
                             allowableValues = {"JSON", "XML", "STRUCTURED", "FLAT"}))
             String format,
             String composition);
+
+    @Operation(
+            summary = "Preview updated composition representing database records"
+    )
+    ResponseEntity<Map<String, Object>> previewUpdatedComposition(
+            String contentType,
+            String accept,
+            String ifMatch,
+            String ehrIdString,
+            String versionedObjectUidString,
+            String templateId,
+            @Parameter(
+                    description = "Composition format",
+                    schema =
+                    @Schema(
+                            type = "string",
+                            allowableValues = {"JSON", "XML", "STRUCTURED", "FLAT"}))
+            String format,
+            String composition);
 }
