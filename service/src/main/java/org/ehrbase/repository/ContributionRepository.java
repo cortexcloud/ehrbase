@@ -107,7 +107,8 @@ public class ContributionRepository {
     @Transactional
     public UUID createContribution(
             UUID ehrId, UUID contributionUuid, ContributionDataType contributionType, UUID auditDetailsRecordId) {
-        ContributionRecord contributionRecord = newContributionRecord(ehrId, contributionUuid, contributionType, auditDetailsRecordId);
+        ContributionRecord contributionRecord =
+                newContributionRecord(ehrId, contributionUuid, contributionType, auditDetailsRecordId);
         contributionRecord.store();
 
         return contributionRecord.getId();
@@ -214,7 +215,8 @@ public class ContributionRepository {
         return auditDetails;
     }
 
-    public AuditDetailsRecord newAuditDetailsRecord(ContributionChangeType contributionChangeType, AuditDetailsTargetType targetType) {
+    public AuditDetailsRecord newAuditDetailsRecord(
+            ContributionChangeType contributionChangeType, AuditDetailsTargetType targetType) {
         AuditDetailsRecord auditDetailsRecord = context.newRecord(AuditDetails.AUDIT_DETAILS);
 
         auditDetailsRecord.setId(UuidGenerator.randomUUID());
@@ -228,7 +230,8 @@ public class ContributionRepository {
         return auditDetailsRecord;
     }
 
-    public ContributionRecord newContributionRecord(UUID ehrId, UUID contributionUuid, ContributionDataType contributionType, UUID auditDetailsRecordId) {
+    public ContributionRecord newContributionRecord(
+            UUID ehrId, UUID contributionUuid, ContributionDataType contributionType, UUID auditDetailsRecordId) {
         ContributionRecord contributionRecord = context.newRecord(Contribution.CONTRIBUTION);
 
         contributionRecord.setEhrId(ehrId);

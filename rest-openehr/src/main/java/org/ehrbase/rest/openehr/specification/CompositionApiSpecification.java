@@ -35,7 +35,7 @@ public interface CompositionApiSpecification {
                     @ExternalDocumentation(
                             url =
                                     "https://specifications.openehr.org/releases/ITS-REST/latest/ehr.html#composition-composition-post"))
-        ResponseEntity<?> createComposition(
+    ResponseEntity<?> createComposition(
             String openehrVersion,
             String openehrAuditDetails,
             String contentType,
@@ -58,7 +58,7 @@ public interface CompositionApiSpecification {
                     @ExternalDocumentation(
                             url =
                                     "https://specifications.openehr.org/releases/ITS-REST/latest/ehr.html#composition-composition-put"))
-        ResponseEntity<?> updateComposition(
+    ResponseEntity<?> updateComposition(
             String openehrVersion,
             String openehrAuditDetails,
             String contentType,
@@ -83,7 +83,7 @@ public interface CompositionApiSpecification {
                     @ExternalDocumentation(
                             url =
                                     "https://specifications.openehr.org/releases/ITS-REST/latest/ehr.html#composition-composition-delete"))
-        ResponseEntity<?> deleteComposition(
+    ResponseEntity<?> deleteComposition(
             String openehrVersion, String openehrAuditDetails, String ehrIdString, String precedingVersionUid);
 
     @Operation(
@@ -92,7 +92,7 @@ public interface CompositionApiSpecification {
                     @ExternalDocumentation(
                             url =
                                     "https://specifications.openehr.org/releases/ITS-REST/latest/ehr.html#composition-composition-get"))
-        ResponseEntity<?> getComposition(
+    ResponseEntity<?> getComposition(
             String accept,
             String ehrIdString,
             String versionedObjectUid,
@@ -105,36 +105,49 @@ public interface CompositionApiSpecification {
                     String format,
             String versionAtTime);
 
-    @Operation(
-            summary = "Validate composition"
-    )
+    @Operation(summary = "Validate composition")
     ResponseEntity<Void> validateComposition(
             String contentType,
             String accept,
             String templateId,
             @Parameter(
-                    description = "Composition format",
-                    schema =
-                    @Schema(
-                            type = "string",
-                            allowableValues = {"JSON", "XML", "STRUCTURED", "FLAT"}))
-            String format,
+                            description = "Composition format",
+                            schema =
+                                    @Schema(
+                                            type = "string",
+                                            allowableValues = {"JSON", "XML", "STRUCTURED", "FLAT"}))
+                    String format,
             String composition);
 
-    @Operation(
-            summary = "Preview uncommited composition representing database records"
-    )
-        ResponseEntity<Map<String, Object>> previewComposition(
+    @Operation(summary = "Preview uncommited composition representing database records")
+    ResponseEntity<Map<String, Object>> previewComposition(
             String contentType,
             String accept,
             String ehrIdString,
             String templateId,
             @Parameter(
-                    description = "Composition format",
-                    schema =
-                    @Schema(
-                            type = "string",
-                            allowableValues = {"JSON", "XML", "STRUCTURED", "FLAT"}))
-            String format,
+                            description = "Composition format",
+                            schema =
+                                    @Schema(
+                                            type = "string",
+                                            allowableValues = {"JSON", "XML", "STRUCTURED", "FLAT"}))
+                    String format,
+            String composition);
+
+    @Operation(summary = "Preview updated composition representing database records")
+    ResponseEntity<Map<String, Object>> previewUpdatedComposition(
+            String contentType,
+            String accept,
+            String ifMatch,
+            String ehrIdString,
+            String versionedObjectUidString,
+            String templateId,
+            @Parameter(
+                            description = "Composition format",
+                            schema =
+                                    @Schema(
+                                            type = "string",
+                                            allowableValues = {"JSON", "XML", "STRUCTURED", "FLAT"}))
+                    String format,
             String composition);
 }

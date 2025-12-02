@@ -73,12 +73,16 @@ public interface QueryApiSpecification {
                             url =
                                     "https://specifications.openehr.org/releases/ITS-REST/latest/query.html#query-execute-query-post"))
     ResponseEntity<CompositionQueryResponse> executeCompositionQuery(
-            Map<String, Object> queryRequest, @Parameter(
-                    description = "Composition format",
-                    schema =
-                    @Schema(
-                            type = "string",
-                            allowableValues = {"JSON", "STRUCTURED", "FLAT"})) String format, String accept, String contentType);
+            Map<String, Object> queryRequest,
+            @Parameter(
+                            description = "Composition format",
+                            schema =
+                                    @Schema(
+                                            type = "string",
+                                            allowableValues = {"JSON", "STRUCTURED", "FLAT"}))
+                    String format,
+            String accept,
+            String contentType);
 
     /**
      * Execute stored query.

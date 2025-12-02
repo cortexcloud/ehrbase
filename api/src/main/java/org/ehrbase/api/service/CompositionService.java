@@ -21,6 +21,7 @@ import com.nedap.archie.rm.changecontrol.OriginalVersion;
 import com.nedap.archie.rm.composition.Composition;
 import com.nedap.archie.rm.ehr.VersionedComposition;
 import com.nedap.archie.rm.generic.RevisionHistory;
+import com.nedap.archie.rm.support.identification.ObjectVersionId;
 import java.time.OffsetDateTime;
 import java.util.Map;
 import java.util.Optional;
@@ -164,4 +165,15 @@ public interface CompositionService extends VersionedObjectService<Composition, 
      * @return preview payload with VR metadata and DR entries mirroring stored rows
      */
     Map<String, Object> previewCompDataRecords(UUID ehrId, Composition composition);
+
+    /**
+     * Generates preview payload for updating an existing composition without persisting it.
+     *
+     * @param ehrId owning EHR identifier
+     * @param precedingVersionUid target version that will be superseded (from If-Match)
+     * @param composition updated composition instance to evaluate
+     * @return preview payload mirroring commit storage rows for an update
+     */
+    Map<String, Object> previewUpdatedCompDataRecords(
+            UUID ehrId, ObjectVersionId precedingVersionUid, Composition composition);
 }

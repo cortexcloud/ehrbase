@@ -52,6 +52,7 @@ import org.ehrbase.api.service.CompositionService;
 import org.ehrbase.api.service.EhrService;
 import org.ehrbase.api.service.SystemService;
 import org.ehrbase.api.service.ValidationService;
+import org.ehrbase.jooq.pg.enums.ContributionChangeType;
 import org.ehrbase.jooq.pg.tables.records.AuditDetailsRecord;
 import org.ehrbase.jooq.pg.tables.records.ContributionRecord;
 import org.ehrbase.openehr.dbformat.StructureNode;
@@ -239,6 +240,16 @@ public class CompositionServiceImp implements CompositionService {
         UUID compId = UUID.fromString(compositionId.getObjectId().getValue());
         int version = Integer.parseInt(compositionId.getVersionTreeId().getValue());
 
+        ensureTemplateCompatibility(compId, composition);
+
+        composition.setUid(buildObjectVersionId(compId, version + 1, systemService));
+
+        compositionRepository.update(ehrId, composition, contributionId, audit);
+
+        return compId;
+    }
+
+    private void ensureTemplateCompatibility(UUID compId, Composition composition) {
         String existingTemplateId = compositionRepository
                 .findTemplateId(compId)
                 .orElseThrow(() -> new ObjectNotFoundException(
@@ -259,12 +270,6 @@ public class CompositionServiceImp implements CompositionService {
                 throw new InvalidApiParameterException("Can't update composition with wrong template version bump.");
             }
         }
-
-        composition.setUid(buildObjectVersionId(compId, version + 1, systemService));
-
-        compositionRepository.update(ehrId, composition, contributionId, audit);
-
-        return compId;
     }
 
     @Override
@@ -411,77 +416,103 @@ public class CompositionServiceImp implements CompositionService {
     // TODO: Refactor response dto to follow project practice using mapper or something
     @Override
     public Map<String, Object> previewCompDataRecords(UUID ehrId, Composition composition) {
-    validateComposition(composition);
+        validateComposition(composition);
 
-    composition.setUid(checkOrConstructObjectVersionId(composition.getUid()));
+        composition.setUid(checkOrConstructObjectVersionId(composition.getUid()));
 
-    VersionCommitPreview preview = compositionRepository.previewVersionData(ehrId, composition);
-    VersionDataDbRecord versionData = preview.versionData();
+        VersionCommitPreview preview = compositionRepository.previewVersionData(ehrId, composition);
+        return buildPreviewResponse(composition, preview);
+    }
 
-    var versionRecord = versionData.versionRecord();
-    Map<String, Object> versionPayload = new LinkedHashMap<>();
+    @Override
+    public Map<String, Object> previewUpdatedCompDataRecords(
+            UUID ehrId, ObjectVersionId precedingVersionUid, Composition composition) {
+        validateComposition(composition);
 
-    String templateId = Optional.ofNullable(composition.getArchetypeDetails())
-        .map(details -> details.getTemplateId().getValue())
-        .orElseThrow(() -> new ValidationException("Composition missing template id"));
-    UUID templateUuid = knowledgeCacheService.findUuidByTemplateId(templateId)
-        .orElseThrow(() -> new ValidationException("Unknown or missing template %s".formatted(templateId)));
+        ehrService.checkEhrExistsAndIsModifiable(ehrId);
 
-    versionPayload.put("ehr_id", versionRecord.getEhrId());
-    versionPayload.put("vo_id", versionRecord.getVoId());
-    versionPayload.put("sys_version", versionRecord.getSysVersion());
-    versionPayload.put("sys_period_lower", versionRecord.getSysPeriodLower());
-    versionPayload.put("contribution_id", versionRecord.getContributionId());
-    versionPayload.put("audit_id", versionRecord.getAuditId());
-    versionPayload.put("template_id", templateUuid);
+        UUID compId = UUID.fromString(precedingVersionUid.getObjectId().getValue());
+        int version = Integer.parseInt(precedingVersionUid.getVersionTreeId().getValue());
 
-    List<Map<String, Object>> dataPayload = versionData.dataRecords().get()
-        .map(entry -> {
-            StructureNode node = entry.getLeft();
-            var dataRecord = entry.getRight();
-            Map<String, Object> data = new LinkedHashMap<>();
-            data.put("vo_id", dataRecord.getVoId());
-            data.put("num", dataRecord.getNum());
-            data.put("citem_num", dataRecord.getCitemNum());
-            data.put("rm_entity", dataRecord.getRmEntity());
-            data.put("entity_concept", dataRecord.getEntityConcept());
-            data.put("entity_name", dataRecord.getEntityName());
-            data.put("entity_attribute", dataRecord.getEntityAttribute());
-            data.put("entity_idx", dataRecord.getEntityIdx());
-            data.put("entity_idx_len", dataRecord.getEntityIdxLen());
-            data.put("data", VersionedObjectDataStructure.applyRmAliases(node.getJsonNode()));
-            data.put("parent_num", dataRecord.getParentNum());
-            data.put("num_cap", dataRecord.getNumCap());
-            return data;
-        })
-        .collect(Collectors.toList());
+        ensureTemplateCompatibility(compId, composition);
 
-    String rootConcept = dataPayload.stream()
-        .map(entry -> (String) entry.get("entity_concept"))
-        .filter(Objects::nonNull)
-        .findFirst()
-        .orElseThrow(() -> new InternalServerException("Unable to determine root concept"));
-    versionPayload.put("root_concept", rootConcept);
+        composition.setUid(buildObjectVersionId(compId, version + 1, systemService));
 
-    ContributionRecord contributionRecord = preview.contributionRecord();
-    Map<String, Object> contributionPayload = new LinkedHashMap<>();
-    contributionRecord.intoMap().forEach(contributionPayload::put);
+        VersionCommitPreview preview =
+                compositionRepository.previewVersionData(ehrId, composition, ContributionChangeType.modification);
+        return buildPreviewResponse(composition, preview);
+    }
 
-    List<Map<String, Object>> auditPayload = preview.auditRecords().stream()
-            .map(AuditDetailsRecord::intoMap)
-            .map(map -> {
-                Map<String, Object> copy = new LinkedHashMap<>();
-                map.forEach(copy::put);
-                return copy;
-            })
-            .collect(Collectors.toList());
+    private Map<String, Object> buildPreviewResponse(Composition composition, VersionCommitPreview preview) {
+        VersionDataDbRecord versionData = preview.versionData();
 
-    Map<String, Object> response = new LinkedHashMap<>();
-    response.put("comp_version", versionPayload);
-    response.put("contribution", contributionPayload);
-    response.put("audit_details", auditPayload);
-    response.put("comp_data", dataPayload);
-    return response;
+        var versionRecord = versionData.versionRecord();
+        Map<String, Object> versionPayload = new LinkedHashMap<>();
+
+        String templateId = Optional.ofNullable(composition.getArchetypeDetails())
+                .map(details -> details.getTemplateId().getValue())
+                .orElseThrow(() -> new ValidationException("Composition missing template id"));
+        UUID templateUuid = knowledgeCacheService
+                .findUuidByTemplateId(templateId)
+                .orElseThrow(() -> new ValidationException("Unknown or missing template %s".formatted(templateId)));
+
+        versionPayload.put("ehr_id", versionRecord.getEhrId());
+        versionPayload.put("vo_id", versionRecord.getVoId());
+        versionPayload.put("sys_version", versionRecord.getSysVersion());
+        versionPayload.put("sys_period_lower", versionRecord.getSysPeriodLower());
+        versionPayload.put("contribution_id", versionRecord.getContributionId());
+        versionPayload.put("audit_id", versionRecord.getAuditId());
+        versionPayload.put("template_id", templateUuid);
+
+        List<Map<String, Object>> dataPayload = versionData
+                .dataRecords()
+                .get()
+                .map(entry -> {
+                    StructureNode node = entry.getLeft();
+                    var dataRecord = entry.getRight();
+                    Map<String, Object> data = new LinkedHashMap<>();
+                    data.put("vo_id", dataRecord.getVoId());
+                    data.put("num", dataRecord.getNum());
+                    data.put("citem_num", dataRecord.getCitemNum());
+                    data.put("rm_entity", dataRecord.getRmEntity());
+                    data.put("entity_concept", dataRecord.getEntityConcept());
+                    data.put("entity_name", dataRecord.getEntityName());
+                    data.put("entity_attribute", dataRecord.getEntityAttribute());
+                    data.put("entity_idx", dataRecord.getEntityIdx());
+                    data.put("entity_idx_len", dataRecord.getEntityIdxLen());
+                    data.put("data", VersionedObjectDataStructure.applyRmAliases(node.getJsonNode()));
+                    data.put("parent_num", dataRecord.getParentNum());
+                    data.put("num_cap", dataRecord.getNumCap());
+                    return data;
+                })
+                .collect(Collectors.toList());
+
+        String rootConcept = dataPayload.stream()
+                .map(entry -> (String) entry.get("entity_concept"))
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElseThrow(() -> new InternalServerException("Unable to determine root concept"));
+        versionPayload.put("root_concept", rootConcept);
+
+        ContributionRecord contributionRecord = preview.contributionRecord();
+        Map<String, Object> contributionPayload = new LinkedHashMap<>();
+        contributionRecord.intoMap().forEach(contributionPayload::put);
+
+        List<Map<String, Object>> auditPayload = preview.auditRecords().stream()
+                .map(AuditDetailsRecord::intoMap)
+                .map(map -> {
+                    Map<String, Object> copy = new LinkedHashMap<>();
+                    map.forEach(copy::put);
+                    return copy;
+                })
+                .collect(Collectors.toList());
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("comp_version", versionPayload);
+        response.put("contribution", contributionPayload);
+        response.put("audit_details", auditPayload);
+        response.put("comp_data", dataPayload);
+        return response;
     }
 
     @Override
