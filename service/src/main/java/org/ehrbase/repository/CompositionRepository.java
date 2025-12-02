@@ -126,14 +126,14 @@ public class CompositionRepository
                 Optional.ofNullable(changeType).orElse(ContributionChangeType.creation);
 
         // Create uncommited audit detail record for contribution
-        AuditDetailsRecord contributionAudit = contributionRepository.newAuditDetailsRecord(
-                effectiveChangeType, AuditDetailsTargetType.CONTRIBUTION);
+        AuditDetailsRecord contributionAudit =
+                contributionRepository.newAuditDetailsRecord(effectiveChangeType, AuditDetailsTargetType.CONTRIBUTION);
         // Create uncommited contribution record
         ContributionRecord contributionRecord = contributionRepository.newContributionRecord(
                 ehrId, UuidGenerator.randomUUID(), ContributionDataType.composition, contributionAudit.getId());
         // Create uncommited audit record for composition
-        AuditDetailsRecord compositionAudit = contributionRepository.newAuditDetailsRecord(
-                effectiveChangeType, AuditDetailsTargetType.COMPOSITION);
+        AuditDetailsRecord compositionAudit =
+                contributionRepository.newAuditDetailsRecord(effectiveChangeType, AuditDetailsTargetType.COMPOSITION);
         // Construct composition to db record representation
         VersionDataDbRecord versionData = VersionDataDbRecord.toRecords(
                 ehrId,

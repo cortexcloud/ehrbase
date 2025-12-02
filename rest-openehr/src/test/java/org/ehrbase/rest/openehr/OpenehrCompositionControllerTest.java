@@ -99,15 +99,17 @@ class OpenehrCompositionControllerTest {
 
         doReturn(composition).when(compositionService).buildComposition(body, CompositionFormat.JSON, null);
 
-        assertThrows(PreconditionFailedException.class, () -> controller.previewUpdatedComposition(
-                MediaType.APPLICATION_JSON_VALUE,
-                null,
-                ifMatch,
-                ehrId.toString(),
-                versionedObjectId.toString(),
-                null,
-                CompositionFormat.JSON.name(),
-                body));
+        assertThrows(
+                PreconditionFailedException.class,
+                () -> controller.previewUpdatedComposition(
+                        MediaType.APPLICATION_JSON_VALUE,
+                        null,
+                        ifMatch,
+                        ehrId.toString(),
+                        versionedObjectId.toString(),
+                        null,
+                        CompositionFormat.JSON.name(),
+                        body));
 
         verify(compositionService, never()).previewUpdatedCompDataRecords(any(), any(), any());
     }

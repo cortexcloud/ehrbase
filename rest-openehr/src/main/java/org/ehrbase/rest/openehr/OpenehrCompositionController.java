@@ -150,7 +150,6 @@ public class OpenehrCompositionController extends BaseController implements Comp
                 .orElse(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build());
     }
 
-
     @PostMapping(value = "/composition/validate")
     @Override
     public ResponseEntity<Void> validateComposition(
@@ -158,8 +157,7 @@ public class OpenehrCompositionController extends BaseController implements Comp
             @RequestHeader(value = ACCEPT, required = false) String accept,
             @RequestParam(value = "templateId", required = false) String templateId,
             @RequestParam(value = "format", required = false) String format,
-            @RequestBody String composition
-    ) {
+            @RequestBody String composition) {
         var requestRepresentation = extractCompositionRepresentation(contentType, format);
         var compoObj = compositionService.buildComposition(composition, requestRepresentation.format, templateId);
 
@@ -170,14 +168,13 @@ public class OpenehrCompositionController extends BaseController implements Comp
 
     @PostMapping(value = "{ehr_id}/composition/preview")
     @Override
-        public ResponseEntity<Map<String, Object>> previewComposition(
+    public ResponseEntity<Map<String, Object>> previewComposition(
             @RequestHeader(value = CONTENT_TYPE) String contentType,
             @RequestHeader(value = ACCEPT, required = false) String accept,
             @PathVariable(value = "ehr_id") String ehrIdString,
             @RequestParam(value = "templateId", required = false) String templateId,
             @RequestParam(value = "format", required = false) String format,
-            @RequestBody String composition
-    ) {
+            @RequestBody String composition) {
         var ehrId = getEhrUuid(ehrIdString);
         var requestRepresentation = extractCompositionRepresentation(contentType, format);
         var compoObj = compositionService.buildComposition(composition, requestRepresentation.format, templateId);
@@ -187,46 +184,46 @@ public class OpenehrCompositionController extends BaseController implements Comp
         return ResponseEntity.ok(compDataPreview);
     }
 
-        @PutMapping(
-                        value = "{ehr_id}/composition/{versioned_object_uid}/preview",
-                        consumes = {
-                                MediaType.APPLICATION_JSON_VALUE,
-                                MediaType.APPLICATION_XML_VALUE,
-                                OpenEHRMediaType.APPLICATION_WT_FLAT_SCHEMA_JSON_VALUE,
-                                OpenEHRMediaType.APPLICATION_WT_STRUCTURED_SCHEMA_JSON_VALUE
-                        })
-        @Override
-        public ResponseEntity<Map<String, Object>> previewUpdatedComposition(
-                        @RequestHeader(value = CONTENT_TYPE) String contentType,
-                        @RequestHeader(value = ACCEPT, required = false) String accept,
-                        @RequestHeader(value = IF_MATCH) String ifMatch,
-                        @PathVariable(value = "ehr_id") String ehrIdString,
-                        @PathVariable(value = "versioned_object_uid") String versionedObjectUidString,
-                        @RequestParam(value = "templateId", required = false) String templateId,
-                        @RequestParam(value = "format", required = false) String format,
-                        @RequestBody String composition) {
+    @PutMapping(
+            value = "{ehr_id}/composition/{versioned_object_uid}/preview",
+            consumes = {
+                MediaType.APPLICATION_JSON_VALUE,
+                MediaType.APPLICATION_XML_VALUE,
+                OpenEHRMediaType.APPLICATION_WT_FLAT_SCHEMA_JSON_VALUE,
+                OpenEHRMediaType.APPLICATION_WT_STRUCTURED_SCHEMA_JSON_VALUE
+            })
+    @Override
+    public ResponseEntity<Map<String, Object>> previewUpdatedComposition(
+            @RequestHeader(value = CONTENT_TYPE) String contentType,
+            @RequestHeader(value = ACCEPT, required = false) String accept,
+            @RequestHeader(value = IF_MATCH) String ifMatch,
+            @PathVariable(value = "ehr_id") String ehrIdString,
+            @PathVariable(value = "versioned_object_uid") String versionedObjectUidString,
+            @RequestParam(value = "templateId", required = false) String templateId,
+            @RequestParam(value = "format", required = false) String format,
+            @RequestBody String composition) {
 
-                UUID ehrId = getEhrUuid(ehrIdString);
-                UUID versionedObjectUid = getCompositionVersionedObjectUidString(versionedObjectUidString);
+        UUID ehrId = getEhrUuid(ehrIdString);
+        UUID versionedObjectUid = getCompositionVersionedObjectUidString(versionedObjectUidString);
 
-                CompositionRepresentation requestRepresentation = extractCompositionRepresentation(contentType, format);
-                Composition compoObj =
-                                compositionService.buildComposition(composition, requestRepresentation.format, templateId);
+        CompositionRepresentation requestRepresentation = extractCompositionRepresentation(contentType, format);
+        Composition compoObj =
+                compositionService.buildComposition(composition, requestRepresentation.format, templateId);
 
-                Optional<String> inputUuid = getUidFrom(compoObj);
-                inputUuid.ifPresent(id -> {
-                        if (!versionedObjectUid.equals(extractVersionedObjectUidFromVersionUid(id))) {
-                                throw new PreconditionFailedException(
-                                                "UUID from input must match given versioned_object_uid in request URL");
-                        }
-                });
+        Optional<String> inputUuid = getUidFrom(compoObj);
+        inputUuid.ifPresent(id -> {
+            if (!versionedObjectUid.equals(extractVersionedObjectUidFromVersionUid(id))) {
+                throw new PreconditionFailedException(
+                        "UUID from input must match given versioned_object_uid in request URL");
+            }
+        });
 
-                ObjectVersionId ifMatchId = new ObjectVersionId(ifMatch);
-                Map<String, Object> compDataPreview =
-                                compositionService.previewUpdatedCompDataRecords(ehrId, ifMatchId, compoObj);
+        ObjectVersionId ifMatchId = new ObjectVersionId(ifMatch);
+        Map<String, Object> compDataPreview =
+                compositionService.previewUpdatedCompDataRecords(ehrId, ifMatchId, compoObj);
 
-                return ResponseEntity.ok(compDataPreview);
-        }
+        return ResponseEntity.ok(compDataPreview);
+    }
 
     @PutMapping(
             value = "/{ehr_id}/composition/{versioned_object_uid}",

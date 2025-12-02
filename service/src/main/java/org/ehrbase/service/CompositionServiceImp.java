@@ -52,9 +52,9 @@ import org.ehrbase.api.service.CompositionService;
 import org.ehrbase.api.service.EhrService;
 import org.ehrbase.api.service.SystemService;
 import org.ehrbase.api.service.ValidationService;
+import org.ehrbase.jooq.pg.enums.ContributionChangeType;
 import org.ehrbase.jooq.pg.tables.records.AuditDetailsRecord;
 import org.ehrbase.jooq.pg.tables.records.ContributionRecord;
-import org.ehrbase.jooq.pg.enums.ContributionChangeType;
 import org.ehrbase.openehr.dbformat.StructureNode;
 import org.ehrbase.openehr.dbformat.VersionedObjectDataStructure;
 import org.ehrbase.openehr.sdk.response.dto.ehrscape.CompositionDto;
@@ -267,8 +267,7 @@ public class CompositionServiceImp implements CompositionService {
             int inputTemplateIdVersion =
                     Integer.parseInt(inputTemplateId.substring(inputTemplateId.lastIndexOf("\\.v") + 1));
             if (inputTemplateIdVersion < existingTemplateIdVersion) {
-                throw new InvalidApiParameterException(
-                        "Can't update composition with wrong template version bump.");
+                throw new InvalidApiParameterException("Can't update composition with wrong template version bump.");
             }
         }
     }
@@ -439,8 +438,8 @@ public class CompositionServiceImp implements CompositionService {
 
         composition.setUid(buildObjectVersionId(compId, version + 1, systemService));
 
-        VersionCommitPreview preview = compositionRepository.previewVersionData(
-                ehrId, composition, ContributionChangeType.modification);
+        VersionCommitPreview preview =
+                compositionRepository.previewVersionData(ehrId, composition, ContributionChangeType.modification);
         return buildPreviewResponse(composition, preview);
     }
 
@@ -453,7 +452,8 @@ public class CompositionServiceImp implements CompositionService {
         String templateId = Optional.ofNullable(composition.getArchetypeDetails())
                 .map(details -> details.getTemplateId().getValue())
                 .orElseThrow(() -> new ValidationException("Composition missing template id"));
-        UUID templateUuid = knowledgeCacheService.findUuidByTemplateId(templateId)
+        UUID templateUuid = knowledgeCacheService
+                .findUuidByTemplateId(templateId)
                 .orElseThrow(() -> new ValidationException("Unknown or missing template %s".formatted(templateId)));
 
         versionPayload.put("ehr_id", versionRecord.getEhrId());
@@ -464,7 +464,9 @@ public class CompositionServiceImp implements CompositionService {
         versionPayload.put("audit_id", versionRecord.getAuditId());
         versionPayload.put("template_id", templateUuid);
 
-        List<Map<String, Object>> dataPayload = versionData.dataRecords().get()
+        List<Map<String, Object>> dataPayload = versionData
+                .dataRecords()
+                .get()
                 .map(entry -> {
                     StructureNode node = entry.getLeft();
                     var dataRecord = entry.getRight();

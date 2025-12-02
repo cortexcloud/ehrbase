@@ -54,6 +54,8 @@ import org.ehrbase.openehr.sdk.response.dto.ehrscape.QueryDefinitionResultDto;
 import org.ehrbase.openehr.sdk.response.dto.ehrscape.QueryResultDto;
 import org.ehrbase.openehr.sdk.response.dto.ehrscape.StructuredString;
 import org.ehrbase.openehr.sdk.response.dto.ehrscape.StructuredStringFormat;
+import org.ehrbase.openehr.sdk.response.dto.ehrscape.query.ResultHolder;
+import org.ehrbase.rest.openehr.dto.CompositionQueryResponse;
 import org.ehrbase.rest.util.OpenEhrQueryRequestUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -65,8 +67,6 @@ import org.mockito.Mockito;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.context.request.RequestContextHolder;
-import org.ehrbase.openehr.sdk.response.dto.ehrscape.query.ResultHolder;
-import org.ehrbase.rest.openehr.dto.CompositionQueryResponse;
 
 public class OpenehrQueryControllerTest {
 
@@ -83,15 +83,12 @@ public class OpenehrQueryControllerTest {
     private final AqlQueryContext mockQueryContext = mock();
 
     private final OpenehrQueryController spyController = spy(new OpenehrQueryController(
-            mockAqlQueryService,
-            mockStoredQueryService,
-            mockQueryContext,
-            mockCompositionService,
-            new ObjectMapper()));
+            mockAqlQueryService, mockStoredQueryService, mockQueryContext, mockCompositionService, new ObjectMapper()));
 
     @BeforeEach
     void setUp() {
-        Mockito.reset(mockAqlQueryService, mockStoredQueryService, mockCompositionService, mockQueryContext, spyController);
+        Mockito.reset(
+                mockAqlQueryService, mockStoredQueryService, mockCompositionService, mockQueryContext, spyController);
         doReturn("https://openehr.test.query.controller.com/rest")
                 .when(spyController)
                 .getContextPath();
@@ -326,43 +323,43 @@ public class OpenehrQueryControllerTest {
         verify(mockCompositionService).getEhrIdForComposition(compositionId);
     }
 
-        @Test
-        void executeCompositionQueryReturnsXmlContentUnchanged() {
-                OpenehrQueryController controller = controller();
+    @Test
+    void executeCompositionQueryReturnsXmlContentUnchanged() {
+        OpenehrQueryController controller = controller();
 
-                UUID compositionId = UUID.randomUUID();
-                ObjectVersionId versionId = new ObjectVersionId(compositionId + "::ehrbase::1");
-                UUID ehrId = UUID.randomUUID();
-                String templateId = "test-template";
+        UUID compositionId = UUID.randomUUID();
+        ObjectVersionId versionId = new ObjectVersionId(compositionId + "::ehrbase::1");
+        UUID ehrId = UUID.randomUUID();
+        String templateId = "test-template";
 
-                Composition composition = mock(Composition.class);
-                doReturn(versionId).when(composition).getUid();
-                doReturn(templateId).when(mockCompositionService).retrieveTemplateId(compositionId);
-                doReturn(Optional.of(ehrId)).when(mockCompositionService).getEhrIdForComposition(compositionId);
+        Composition composition = mock(Composition.class);
+        doReturn(versionId).when(composition).getUid();
+        doReturn(templateId).when(mockCompositionService).retrieveTemplateId(compositionId);
+        doReturn(Optional.of(ehrId)).when(mockCompositionService).getEhrIdForComposition(compositionId);
 
-                ResultHolder holder = new ResultHolder();
-                holder.putResult("alias", composition);
+        ResultHolder holder = new ResultHolder();
+        holder.putResult("alias", composition);
 
-                QueryResultDto dto = new QueryResultDto();
-                dto.setResultSet(List.of(holder));
-                doReturn(dto).when(mockAqlQueryService).query(any());
+        QueryResultDto dto = new QueryResultDto();
+        dto.setResultSet(List.of(holder));
+        doReturn(dto).when(mockAqlQueryService).query(any());
 
-                StructuredString serialized = new StructuredString("<composition/>", StructuredStringFormat.XML);
-                doReturn(serialized).when(mockCompositionService).serialize(any(), any());
+        StructuredString serialized = new StructuredString("<composition/>", StructuredStringFormat.XML);
+        doReturn(serialized).when(mockCompositionService).serialize(any(), any());
 
-                Map<String, Object> requestBody = Map.of("q", "SELECT c FROM COMPOSITION c");
+        Map<String, Object> requestBody = Map.of("q", "SELECT c FROM COMPOSITION c");
 
-                ResponseEntity<CompositionQueryResponse> response = controller.executeCompositionQuery(
-                                requestBody, null, MediaType.APPLICATION_XML_VALUE, MediaType.APPLICATION_JSON_VALUE);
+        ResponseEntity<CompositionQueryResponse> response = controller.executeCompositionQuery(
+                requestBody, null, MediaType.APPLICATION_XML_VALUE, MediaType.APPLICATION_JSON_VALUE);
 
-                CompositionQueryResponse body = response.getBody();
-                assertNotNull(body);
-                assertThat(body.compositions()).singleElement().satisfies(row -> {
-                                assertThat(row.ehrId()).isEqualTo(ehrId);
-                        assertThat(row.content()).isEqualTo(serialized.getValue());
-                        assertThat(row.format()).isEqualTo("XML");
-                });
-        }
+        CompositionQueryResponse body = response.getBody();
+        assertNotNull(body);
+        assertThat(body.compositions()).singleElement().satisfies(row -> {
+            assertThat(row.ehrId()).isEqualTo(ehrId);
+            assertThat(row.content()).isEqualTo(serialized.getValue());
+            assertThat(row.format()).isEqualTo("XML");
+        });
+    }
 
     @Test
     void executeCompositionQueryRejectsNonCompositionResult() {
@@ -396,9 +393,7 @@ public class OpenehrQueryControllerTest {
                 () -> controller.executeCompositionQuery(
                         requestBody, null, MediaType.APPLICATION_JSON_VALUE, MediaType.APPLICATION_JSON_VALUE));
 
-        assertEquals(
-                "Composition query must select the composition root without sub-paths.",
-                exception.getMessage());
+        assertEquals("Composition query must select the composition root without sub-paths.", exception.getMessage());
     }
 
     @Test

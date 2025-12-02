@@ -52,12 +52,12 @@ import org.ehrbase.openehr.sdk.aql.dto.select.SelectClause;
 import org.ehrbase.openehr.sdk.aql.dto.select.SelectExpression;
 import org.ehrbase.openehr.sdk.response.dto.MetaData;
 import org.ehrbase.openehr.sdk.response.dto.QueryResponseData;
+import org.ehrbase.openehr.sdk.response.dto.ehrscape.CompositionDto;
+import org.ehrbase.openehr.sdk.response.dto.ehrscape.CompositionFormat;
 import org.ehrbase.openehr.sdk.response.dto.ehrscape.QueryDefinitionResultDto;
 import org.ehrbase.openehr.sdk.response.dto.ehrscape.QueryResultDto;
-import org.ehrbase.openehr.sdk.response.dto.ehrscape.query.ResultHolder;
-import org.ehrbase.openehr.sdk.response.dto.ehrscape.CompositionDto;
 import org.ehrbase.openehr.sdk.response.dto.ehrscape.StructuredString;
-import org.ehrbase.openehr.sdk.response.dto.ehrscape.CompositionFormat;
+import org.ehrbase.openehr.sdk.response.dto.ehrscape.query.ResultHolder;
 import org.ehrbase.rest.BaseController;
 import org.ehrbase.rest.openehr.dto.CompositionQueryResponse;
 import org.ehrbase.rest.openehr.format.CompositionRepresentation;
@@ -192,14 +192,14 @@ public class OpenehrQueryController extends BaseController implements QueryApiSp
 
         PreparedAdHocQuery preparedQuery = prepareAdHocQuery(requestBody);
 
-    validateCompositionSelect(preparedQuery);
+        validateCompositionSelect(preparedQuery);
 
-    String effectiveFormat = Optional.ofNullable(format)
-        .filter(StringUtils::isNotBlank)
-        .orElseGet(() -> Optional.ofNullable(requestBody)
-            .map(body -> body.get(COMPOSITION_FORMAT_PARAM))
-            .map(Object::toString)
-            .orElse(null));
+        String effectiveFormat = Optional.ofNullable(format)
+                .filter(StringUtils::isNotBlank)
+                .orElseGet(() -> Optional.ofNullable(requestBody)
+                        .map(body -> body.get(COMPOSITION_FORMAT_PARAM))
+                        .map(Object::toString)
+                        .orElse(null));
 
         CompositionRepresentation representation = extractCompositionRepresentation(accept, effectiveFormat);
 
@@ -207,9 +207,7 @@ public class OpenehrQueryController extends BaseController implements QueryApiSp
 
         CompositionQueryResponse response = toCompositionResponse(preparedQuery, result, representation);
 
-        return ResponseEntity.ok()
-                .contentType(representation.mediaType)
-                .body(response);
+        return ResponseEntity.ok().contentType(representation.mediaType).body(response);
     }
 
     /**
@@ -313,26 +311,26 @@ public class OpenehrQueryController extends BaseController implements QueryApiSp
         logger.debug("Got following input: {}", body);
 
         Object rawQuery = body.get(Q_PARAM);
-        String queryText = switch (rawQuery) {
-            case null -> throw new InvalidApiParameterException("No query provided.");
-            case Collection<?> __ -> throw new InvalidApiParameterException("Multiple queries provided.");
-            case String s when StringUtils.isBlank(s) -> throw new InvalidApiParameterException("No query provided.");
-            case String s -> s;
-            default -> throw new InvalidApiParameterException("Data type of query not supported.");
-        };
+        String queryText =
+                switch (rawQuery) {
+                    case null -> throw new InvalidApiParameterException("No query provided.");
+                    case Collection<?> __ -> throw new InvalidApiParameterException("Multiple queries provided.");
+                    case String s
+                    when StringUtils.isBlank(s) -> throw new InvalidApiParameterException("No query provided.");
+                    case String s -> s;
+                    default -> throw new InvalidApiParameterException("Data type of query not supported.");
+                };
 
         HttpRestContext.register(QUERY_EXECUTE_ENDPOINT, Boolean.TRUE);
 
         Map<String, Object> params = OpenEhrQueryRequestUtils.getSubMap(body, QUERY_PARAMETERS);
 
         Long fetch = OpenEhrQueryRequestUtils.getOptionalLong(body, FETCH_PARAM).orElse(null);
-        Long offset = OpenEhrQueryRequestUtils.getOptionalLong(body, OFFSET_PARAM).orElse(null);
+        Long offset =
+                OpenEhrQueryRequestUtils.getOptionalLong(body, OFFSET_PARAM).orElse(null);
 
         AqlQueryRequest queryRequest = AqlQueryRequest.prepare(
-                queryText,
-                OpenEhrQueryRequestUtils.rewriteExplicitParameterTypes(params),
-                fetch,
-                offset);
+                queryText, OpenEhrQueryRequestUtils.rewriteExplicitParameterTypes(params), fetch, offset);
 
         return new PreparedAdHocQuery(queryText, queryRequest);
     }
@@ -342,9 +340,11 @@ public class OpenehrQueryController extends BaseController implements QueryApiSp
         SelectClause selectClause = Optional.ofNullable(aqlQuery.getSelect())
                 .orElseThrow(() -> new InvalidApiParameterException("Query must contain a SELECT clause."));
 
-        List<SelectExpression> statements = Optional.ofNullable(selectClause.getStatement()).orElse(List.of());
+        List<SelectExpression> statements =
+                Optional.ofNullable(selectClause.getStatement()).orElse(List.of());
         if (statements.size() != 1) {
-            throw new InvalidApiParameterException("Composition query endpoint supports exactly one SELECT expression.");
+            throw new InvalidApiParameterException(
+                    "Composition query endpoint supports exactly one SELECT expression.");
         }
 
         SelectExpression expression = statements.getFirst();
@@ -356,7 +356,8 @@ public class OpenehrQueryController extends BaseController implements QueryApiSp
         if (identifiedPath.getPath() != null
                 && identifiedPath.getPath().getPathNodes() != null
                 && !identifiedPath.getPath().getPathNodes().isEmpty()) {
-            throw new InvalidApiParameterException("Composition query must select the composition root without sub-paths.");
+            throw new InvalidApiParameterException(
+                    "Composition query must select the composition root without sub-paths.");
         }
 
         AbstractContainmentExpression root = identifiedPath.getRoot();
@@ -372,10 +373,11 @@ public class OpenehrQueryController extends BaseController implements QueryApiSp
     }
 
     private CompositionQueryResponse toCompositionResponse(
-        PreparedAdHocQuery preparedQuery, QueryResultDto result, CompositionRepresentation representation) {
+            PreparedAdHocQuery preparedQuery, QueryResultDto result, CompositionRepresentation representation) {
 
         MetaData meta = aqlQueryContext.createMetaData(null);
-        List<ResultHolder> resultSet = Optional.ofNullable(result.getResultSet()).orElse(List.of());
+        List<ResultHolder> resultSet =
+                Optional.ofNullable(result.getResultSet()).orElse(List.of());
 
         List<CompositionQueryResponse.CompositionRow> rows = new ArrayList<>(resultSet.size());
         for (ResultHolder holder : resultSet) {
@@ -394,11 +396,12 @@ public class OpenehrQueryController extends BaseController implements QueryApiSp
     }
 
     private CompositionQueryResponse.CompositionRow buildCompositionRow(
-        Composition composition, CompositionRepresentation representation) {
+            Composition composition, CompositionRepresentation representation) {
 
         ObjectVersionId versionId = composition.getUid() instanceof ObjectVersionId id ? id : null;
         UUID compositionId = extractCompositionId(versionId);
-        String versionUid = Optional.ofNullable(versionId).map(ObjectVersionId::getValue).orElse(null);
+        String versionUid =
+                Optional.ofNullable(versionId).map(ObjectVersionId::getValue).orElse(null);
         Integer version = extractVersion(versionId);
 
         String templateId = resolveTemplateId(composition, compositionId);
@@ -414,16 +417,10 @@ public class OpenehrQueryController extends BaseController implements QueryApiSp
         CompositionDto dto = new CompositionDto(composition, templateId, compositionId, null);
         StructuredString serialized = compositionService.serialize(dto, representation.format);
 
-    Object content = deserializeCompositionContent(serialized, representation);
+        Object content = deserializeCompositionContent(serialized, representation);
 
-    return new CompositionQueryResponse.CompositionRow(
-                ehrId,
-        versionUid,
-        version,
-        templateId,
-        representation.format.name(),
-            content
-        );
+        return new CompositionQueryResponse.CompositionRow(
+                ehrId, versionUid, version, templateId, representation.format.name(), content);
     }
 
     private UUID extractCompositionId(ObjectVersionId versionId) {
