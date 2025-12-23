@@ -1,0 +1,30 @@
+# syntax=docker/dockerfile:1
+FROM eclipse-temurin:21-jre-alpine
+
+RUN addgroup -S ehrbase && adduser -S ehrbase -G ehrbase
+
+USER ehrbase
+
+WORKDIR /app
+
+COPY /application/target/ehrbase.jar /app/ehrbase.jar
+
+RUN mkdir -p /app/plugin_dir /app/plugin_config_dir
+
+COPY --chown=ehrbase:ehrbase plugins/*.jar /app/plugin_dir/
+
+# copy plugin configs (optional, if provided)
+# note: this will fail if plugin_configs/ doesn't exist
+# create an empty plugin_configs/ directory in build context if no configs are needed
+COPY --chown=ehrbase:ehrbase plugin_configs/ /app/plugin_config_dir/
+
+COPY --chown=ehrbase:ehrbase /docker-entrypoint.sh /app/docker-entrypoint
+
+RUN chown -R ehrbase:ehrbase /app && \
+    chmod +x /app/docker-entrypoint
+
+EXPOSE 8080
+
+# wrapped in entrypoint to be able to accept cli args and use jacoco cli env var
+ENTRYPOINT ["/app/docker-entrypoint"]
+

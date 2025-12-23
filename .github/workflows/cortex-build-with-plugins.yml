@@ -1,0 +1,545 @@
+name: "Build EHRbase with Plugins"
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      extension_run_id:
+        description: Extension workflow run ID
+        required: false
+        type: string
+      extension_branch:
+        description: Extension branch name
+        required: false
+        type: string
+      extension_repo:
+        description: Extension repository
+        required: false
+        type: string
+      trigger_type:
+        description: Trigger type (plugin-changed or ehrbase-changed)
+        required: false
+        type: string
+        default: 'ehrbase-changed'
+
+env:
+  JAVA_VERSION: 21
+  JAVA_DISTRIBUTION: 'temurin'
+  PLUGIN_REPO: cortexcloud/ehrbase-extension
+  PLUGIN_BRANCH: devel # change to main if wanna build from main branch
+  EXTENSION_WORKFLOW: cortex-build-plugins.yml
+  EHRBASE_IMAGE: cortex-x/ehrbase
+  ARTIFACT_RETENTION_DAYS: 1
+  JAR_PATH: ./application/target/ehrbase.jar
+  PLUGINS_PATH: ./plugins/
+
+jobs:
+  # STRATEGY & CONFIGURATION
+  determine-build-strategy:
+    name: Determine Build Strategy
+    runs-on: ubuntu-latest
+    outputs:
+      rebuild-ehrbase: ${{ steps.strategy.outputs.rebuild }}
+      trigger-source: ${{ steps.strategy.outputs.source }}
+      extension-branch: ${{ steps.config.outputs.extension-branch }}
+    steps:
+      - name: Determine Strategy
+        id: strategy
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.trigger_type }}" = "plugin-changed" ]; then
+            echo "✅ Triggered by ehrbase-extension - will skip ehrbase.jar rebuild"
+            echo "rebuild=false" >> $GITHUB_OUTPUT
+            echo "source=plugin-changed" >> $GITHUB_OUTPUT
+          else
+            echo "✅ Triggered by ehrbase push or manual - will rebuild ehrbase.jar"
+            echo "rebuild=true" >> $GITHUB_OUTPUT
+            echo "source=ehrbase-changed" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set Extension Branch
+        id: config
+        run: |
+          BRANCH="${{ github.event.inputs.extension_branch || env.PLUGIN_BRANCH }}"
+          echo "extension-branch=${BRANCH}" >> $GITHUB_OUTPUT
+          echo "Using extension branch: ${BRANCH}"
+
+  # EHRBASE BUILD JOBS
+  build-ehrbase:
+    name: Build EHRbase
+    runs-on: ubuntu-latest
+    needs: [determine-build-strategy]
+    if: needs.determine-build-strategy.outputs.rebuild-ehrbase == 'true'
+    outputs:
+      ehrbase-version: ${{ steps.get_version.outputs.ehrbase-version }}
+    steps:
+      - name: Checkout EHRbase
+        uses: actions/checkout@v4
+
+      - name: Setup Java & Maven Cache
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          cache: 'maven'
+
+      - name: Setup Dependency Cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: deps-${{ runner.os }}-m2-${{ github.head_ref }}-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            deps-${{ runner.os }}-m2-${{ github.head_ref }}-
+            deps-${{ runner.os }}-m2-
+            deps-${{ runner.os }}-
+            deps-
+
+      - name: Build with Maven
+        run: mvn --batch-mode --update-snapshots --activate-profiles full verify
+
+      - name: Extract Version
+        id: get_version
+        run: |
+          version=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          echo "EHRbase version [$version]"
+          echo "ehrbase-version=${version}" >> $GITHUB_OUTPUT
+
+      - name: Upload EHRbase JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: ehrbase-jar
+          path: ${{ env.JAR_PATH }}
+          if-no-files-found: error
+          retention-days: ${{ env.ARTIFACT_RETENTION_DAYS }}
+
+  get-latest-ehrbase:
+    name: Extract EHRbase JAR from ACR
+    runs-on: ubuntu-latest
+    needs: [determine-build-strategy]
+    if: needs.determine-build-strategy.outputs.rebuild-ehrbase == 'false'
+    outputs:
+      ehrbase-version: ${{ steps.get_version.outputs.version }}
+      jar-available: ${{ steps.check.outputs.available }}
+    steps:
+      - name: Login to Azure Container Registry
+        uses: azure/docker-login@v1
+        with:
+          login-server: ${{ secrets.MAIN_REGISTRY }}
+          username: ${{ secrets.MAIN_REGISTRY_USERNAME }}
+          password: ${{ secrets.MAIN_REGISTRY_PASSWORD }}
+
+      - name: Extract JAR from Image
+        id: extract
+        run: |
+          IMAGE="${{ secrets.MAIN_REGISTRY }}/${{ env.EHRBASE_IMAGE }}:latest"
+          echo "✅ Pulling image: ${IMAGE}"
+          
+          if ! docker pull "${IMAGE}"; then
+            echo "❌ Failed to pull image"
+            echo "success=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          mkdir -p $(dirname ${{ env.JAR_PATH }})
+          CONTAINER_ID=$(docker create "${IMAGE}")
+          
+          if docker cp "${CONTAINER_ID}:/app/ehrbase.jar" ${{ env.JAR_PATH }}; then
+            echo "✅ Successfully extracted ehrbase.jar"
+            echo "success=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Failed to extract ehrbase.jar"
+            echo "success=false" >> $GITHUB_OUTPUT
+          fi
+          docker rm "${CONTAINER_ID}"
+
+      - name: Check JAR Availability
+        id: check
+        run: |
+          if [ -f "${{ env.JAR_PATH }}" ]; then
+            echo "available=true" >> $GITHUB_OUTPUT
+            echo "✅ Successfully extracted ehrbase.jar from ACR"
+            ls -lah ${{ env.JAR_PATH }}
+          else
+            echo "available=false" >> $GITHUB_OUTPUT
+            echo "⚠️ No ehrbase.jar extracted - will fallback to building"
+          fi
+
+      - name: Extract Version from JAR
+        id: get_version
+        if: steps.check.outputs.available == 'true'
+        run: |
+          version=$(unzip -p ${{ env.JAR_PATH }} META-INF/MANIFEST.MF 2>/dev/null | \
+            grep -i "Implementation-Version" | head -1 | cut -d' ' -f2 | tr -d '\r' || echo "unknown")
+          
+          if [ "$version" = "unknown" ]; then
+            version=$(unzip -p ${{ env.JAR_PATH }} META-INF/MANIFEST.MF 2>/dev/null | \
+              grep -i "Specification-Version" | head -1 | cut -d' ' -f2 | tr -d '\r' || echo "latest")
+          fi
+          
+          echo "version=${version}" >> $GITHUB_OUTPUT
+          echo "EHRbase version from ACR JAR: ${version}"
+
+      - name: Upload EHRbase JAR
+        if: steps.check.outputs.available == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ehrbase-jar
+          path: ${{ env.JAR_PATH }}
+          if-no-files-found: error
+          retention-days: ${{ env.ARTIFACT_RETENTION_DAYS }}
+
+      - name: Summary
+        run: |
+          if [ "${{ steps.check.outputs.available }}" = "true" ]; then
+            echo "## ✅ EHRbase JAR Extracted from ACR" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Source:** \`${{ secrets.MAIN_REGISTRY }}/${{ env.EHRBASE_IMAGE }}:latest\`" >> $GITHUB_STEP_SUMMARY
+            echo "**Version:** \`${{ steps.get_version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## ⚠️ Failed to Extract from ACR" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Will fallback to building ehrbase.jar from source" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  build-ehrbase-fallback:
+    name: Build EHRbase (Fallback)
+    runs-on: ubuntu-latest
+    needs: [determine-build-strategy, get-latest-ehrbase]
+    if: |
+      needs.determine-build-strategy.outputs.rebuild-ehrbase == 'false' &&
+      needs.get-latest-ehrbase.outputs.jar-available == 'false'
+    outputs:
+      ehrbase-version: ${{ steps.get_version.outputs.ehrbase-version }}
+    steps:
+      - name: Checkout EHRbase
+        uses: actions/checkout@v4
+
+      - name: Setup Java & Maven Cache
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          cache: 'maven'
+
+      - name: Setup Dependency Cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: deps-${{ runner.os }}-m2-${{ github.head_ref }}-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            deps-${{ runner.os }}-m2-${{ github.head_ref }}-
+            deps-${{ runner.os }}-m2-
+            deps-${{ runner.os }}-
+            deps-
+
+      - name: Build with Maven
+        run: mvn --batch-mode --update-snapshots --activate-profiles full verify
+
+      - name: Extract Version
+        id: get_version
+        run: |
+          version=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          echo "EHRbase version [$version] (fallback build)"
+          echo "ehrbase-version=${version}" >> $GITHUB_OUTPUT
+
+      - name: Upload EHRbase JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: ehrbase-jar
+          path: ${{ env.JAR_PATH }}
+          retention-days: ${{ env.ARTIFACT_RETENTION_DAYS }}
+
+  # PLUGIN BUILD JOBS
+  get-latest-plugins:
+    name: Get Latest Plugin JARs
+    runs-on: ubuntu-latest
+    needs: [determine-build-strategy]
+    if: needs.determine-build-strategy.outputs.trigger-source == 'plugin-changed'
+    outputs:
+      plugins-available: ${{ steps.check.outputs.available }}
+    steps:
+      - name: Get Extension Workflow Run ID
+        id: get_run_id
+        run: |
+          if [ -n "${{ github.event.inputs.extension_run_id }}" ]; then
+            RUN_ID="${{ github.event.inputs.extension_run_id }}"
+            echo "run_id=${RUN_ID}" >> $GITHUB_OUTPUT
+            echo "Using extension workflow run ID: ${RUN_ID}"
+          else
+            echo "No run_id in inputs"
+            echo "run_id=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download Plugin JARs from Extension Workflow
+        if: steps.get_run_id.outputs.run_id != ''
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: ${{ env.EXTENSION_WORKFLOW }}
+          workflow_conclusion: success
+          name: plugin-jars
+          path: ${{ env.PLUGINS_PATH }}
+          branch: ${{ needs.determine-build-strategy.outputs.extension-branch }}
+          run_id: ${{ steps.get_run_id.outputs.run_id }}
+        continue-on-error: true
+
+      - name: Check Plugin JARs Availability
+        id: check
+        run: |
+          if ls ${{ env.PLUGINS_PATH }}*-plugin.jar 1> /dev/null 2>&1; then
+            echo "available=true" >> $GITHUB_OUTPUT
+            echo "✅ Successfully downloaded plugin JARs"
+            ls -lah ${{ env.PLUGINS_PATH }}
+          else
+            echo "available=false" >> $GITHUB_OUTPUT
+            echo "⚠️ No plugin JARs found - will build plugins"
+          fi
+
+  build-plugins:
+    name: Build Plugins
+    runs-on: ubuntu-latest
+    needs: [determine-build-strategy, get-latest-plugins]
+    if: |
+      needs.determine-build-strategy.outputs.trigger-source != 'plugin-changed' ||
+      needs.get-latest-plugins.outputs.plugins-available != 'true'
+    outputs:
+      plugin-jars-exist: ${{ steps.check_plugins.outputs.exists }}
+    steps:
+      - name: Checkout ehrbase-extension
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.PLUGIN_REPO }}
+          path: ehrbase-extension
+          ref: ${{ needs.determine-build-strategy.outputs.extension-branch }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Java & Maven Cache
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          cache: 'maven'
+
+      - name: Setup Dependency Cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: deps-${{ runner.os }}-plugins-${{ needs.determine-build-strategy.outputs.extension-branch }}-${{ hashFiles('ehrbase-extension/**/pom.xml') }}
+          restore-keys: |
+            deps-${{ runner.os }}-plugins-${{ needs.determine-build-strategy.outputs.extension-branch }}-
+            deps-${{ runner.os }}-plugins-
+
+      - name: Build Plugins
+        id: check_plugins
+        working-directory: ehrbase-extension
+        run: |
+          echo "🔍 Discovering all plugins..."
+          
+          # TODO: build all plugins dynamically
+          # for now, hardcoding to build only hello-world-plugin
+          PLUGIN_PATH="plugin/examples/hello-world-plugin"
+          
+          if [ ! -d "${PLUGIN_PATH}" ] || [ ! -f "${PLUGIN_PATH}/pom.xml" ]; then
+            echo "⚠️ ${PLUGIN_PATH} not found or missing pom.xml"
+            echo "exists=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          echo "📦 Building ${PLUGIN_PATH}..."
+          cd "${PLUGIN_PATH}"
+          
+          if mvn --batch-mode clean package; then
+            PLUGIN_COUNT=$(find . -name '*-plugin.jar' -type f 2>/dev/null | wc -l)
+            if [ $PLUGIN_COUNT -gt 0 ]; then
+              echo "✅ Built successfully. Found $PLUGIN_COUNT plugin JAR(s)"
+              find . -name '*-plugin.jar' -type f -exec ls -lah {} \;
+              echo "exists=true" >> $GITHUB_OUTPUT
+            else
+              echo "⚠️ Build succeeded but no plugin JARs found"
+              echo "exists=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "❌ Build failed"
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Prepare Plugin Directory
+        if: steps.check_plugins.outputs.exists == 'true'
+        run: |
+          mkdir -p ${{ env.PLUGINS_PATH }}
+          # TODO: collect from all plugins when building dynamically
+          find ehrbase-extension/plugin/examples/hello-world-plugin -name '*-plugin.jar' -type f -exec cp {} ${{ env.PLUGINS_PATH }} \; 2>/dev/null || true
+          echo "📦 Plugin JARs prepared:"
+          ls -lah ${{ env.PLUGINS_PATH }}
+
+      - name: Upload Plugin JARs
+        if: steps.check_plugins.outputs.exists == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-jars
+          path: ${{ env.PLUGINS_PATH }}*.jar
+          if-no-files-found: warn
+          retention-days: ${{ env.ARTIFACT_RETENTION_DAYS }}
+
+  # VERSION & TAG GENERATION
+  get-version-and-tag:
+    name: Get Version and Tag
+    runs-on: ubuntu-latest
+    needs: [determine-build-strategy, build-ehrbase, get-latest-ehrbase, build-ehrbase-fallback]
+    if: always()
+    outputs:
+      ehrbase-version: ${{ steps.version.outputs.version }}
+      image-tag: ${{ steps.tag.outputs.tag }}
+      build-strategy: ${{ steps.version.outputs.strategy }}
+    steps:
+      - name: Extract Version and Strategy
+        id: version
+        run: |
+          if [ "${{ needs.build-ehrbase.result }}" = "success" ]; then
+            VERSION="${{ needs.build-ehrbase.outputs.ehrbase-version }}"
+            STRATEGY="Rebuilt ehrbase.jar ✅"
+          elif [ "${{ needs.get-latest-ehrbase.outputs.jar-available }}" = "true" ]; then
+            VERSION="${{ needs.get-latest-ehrbase.outputs.ehrbase-version }}"
+            STRATEGY="Reused ehrbase.jar ✅"
+          elif [ "${{ needs.build-ehrbase-fallback.result }}" = "success" ]; then
+            VERSION="${{ needs.build-ehrbase-fallback.outputs.ehrbase-version }}"
+            STRATEGY="Built ehrbase.jar (fallback) ✅"
+          else
+            echo "❌ Error: No ehrbase.jar available."
+            exit 1
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "strategy=${STRATEGY}" >> $GITHUB_OUTPUT
+
+      - name: Generate Image Tag
+        id: tag
+        run: |
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+          TAG="${{ steps.version.outputs.version }}-${SHORT_SHA}-plugins"
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "Image tag: ${TAG}"
+
+  # DOCKER BUILD & DEPLOY
+  build-docker:
+    name: Build Docker Image with Plugins
+    runs-on: ubuntu-latest
+    needs: [determine-build-strategy, build-ehrbase, get-latest-ehrbase, build-ehrbase-fallback, get-latest-plugins, build-plugins, get-version-and-tag]
+    if: |
+      (
+        needs.get-latest-plugins.outputs.plugins-available == 'true' ||
+        (needs.build-plugins.result != 'skipped' && needs.build-plugins.outputs.plugin-jars-exist == 'true')
+      ) &&
+      needs.get-version-and-tag.result == 'success'
+    steps:
+      - name: Checkout EHRbase
+        uses: actions/checkout@v4
+
+      - name: Download EHRbase JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: ehrbase-jar
+          path: $(dirname ${{ env.JAR_PATH }})
+
+      - name: Download Plugin JARs (from current workflow)
+        if: needs.get-latest-plugins.outputs.plugins-available != 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: plugin-jars
+          path: ${{ env.PLUGINS_PATH }}
+
+      - name: Download Plugin JARs (from extension workflow)
+        if: needs.get-latest-plugins.outputs.plugins-available == 'true'
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: ${{ env.EXTENSION_WORKFLOW }}
+          workflow_conclusion: success
+          name: plugin-jars
+          path: ${{ env.PLUGINS_PATH }}
+          branch: ${{ needs.determine-build-strategy.outputs.extension-branch }}
+          run_id: ${{ github.event.inputs.extension_run_id }}
+
+      - name: List Plugin Files
+        run: |
+          echo "Plugin JARs:"
+          ls -lah ${{ env.PLUGINS_PATH }} || echo "No plugins found"
+
+      - name: Login to Azure Container Registry
+        uses: azure/docker-login@v1
+        with:
+          login-server: ${{ secrets.MAIN_REGISTRY }}
+          username: ${{ secrets.MAIN_REGISTRY_USERNAME }}
+          password: ${{ secrets.MAIN_REGISTRY_PASSWORD }}
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Setup QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Build & Push Docker Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.plugins
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.ref == 'refs/heads/main' }}
+          tags: |
+            ${{ secrets.MAIN_REGISTRY }}/${{ env.EHRBASE_IMAGE }}:${{ needs.get-version-and-tag.outputs.image-tag }}
+            ${{ secrets.MAIN_REGISTRY }}/${{ env.EHRBASE_IMAGE }}:latest-plugins
+          cache-from: type=registry,ref=${{ secrets.MAIN_REGISTRY }}/${{ env.EHRBASE_IMAGE }}:buildcache
+          cache-to: type=inline
+
+      - name: Build Summary
+        run: |
+          echo "## Docker Image Built Successfully ✅" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Image:** \`${{ secrets.MAIN_REGISTRY }}/${{ env.EHRBASE_IMAGE }}:${{ needs.get-version-and-tag.outputs.image-tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** main" >> $GITHUB_STEP_SUMMARY
+          echo "**Build Strategy:** ${{ needs.get-version-and-tag.outputs.build-strategy }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if ls ${{ env.PLUGINS_PATH }}*-plugin.jar 1> /dev/null 2>&1; then
+            PLUGIN_COUNT=$(ls -1 ${{ env.PLUGINS_PATH }}*-plugin.jar 2>/dev/null | wc -l)
+            echo "**Plugins Included:** $PLUGIN_COUNT plugin(s)" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            for jar in ${{ env.PLUGINS_PATH }}*-plugin.jar; do
+              echo "- \`$(basename "$jar")\`" >> $GITHUB_STEP_SUMMARY
+            done
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ needs.determine-build-strategy.outputs.trigger-source }}" = "plugin-changed" ]; then
+            echo " Skipped rebuilding ehrbase.jar" >> $GITHUB_STEP_SUMMARY
+            echo "   - Reused ehrbase.jar from previous build" >> $GITHUB_STEP_SUMMARY
+            if [ "${{ needs.get-latest-plugins.outputs.plugins-available }}" = "true" ]; then
+              echo "   - Reused plugin JARs from ehrbase-extension workflow" >> $GITHUB_STEP_SUMMARY
+            fi
+          fi
+
+  deploy-dev:
+    name: Deploy to Development
+    runs-on: ubuntu-latest
+    needs: [build-docker, get-version-and-tag]
+    if: github.ref == 'refs/heads/main' && needs.build-docker.result == 'success'
+    steps:
+      - name: Trigger Deployment
+        env:
+          GITHUB_TOKEN: ${{ secrets.GIT_PAT_CORTEX_DEPLOYMENT_DISPATCH_ACTIONS }}
+        run: |
+          gh workflow run update-apps.yml \
+            -R cortexcloud/deployment \
+            -r main \
+            -F environment=development \
+            -F tag=${{ needs.get-version-and-tag.outputs.image-tag }} \
+            -F apps='{ "dockerApp": ["ehrbase"] }' || echo "Deployment trigger failed - check if workflow exists"
+
+      - name: Deployment Summary
+        run: |
+          echo "## Deployment Triggered ✅" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Image:** \`${{ secrets.MAIN_REGISTRY }}/${{ env.EHRBASE_IMAGE }}:${{ needs.get-version-and-tag.outputs.image-tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** development" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** main" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
