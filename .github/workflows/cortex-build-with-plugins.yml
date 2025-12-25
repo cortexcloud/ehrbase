@@ -15,7 +15,7 @@ on:
         required: false
         type: string
       extension_repo:
-        description: Extension repository
+        description: Extension repository (e.g., cortexcloud/ehrbase-extension)
         required: false
         type: string
       trigger_type:
@@ -33,6 +33,7 @@ env:
   EHRBASE_IMAGE: cortex-x/ehrbase
   ARTIFACT_RETENTION_DAYS: 1
   JAR_PATH: ./application/target/ehrbase.jar
+  JAR_DIR: ./application/target
   PLUGINS_PATH: ./plugins/
 
 jobs:
@@ -44,6 +45,7 @@ jobs:
       rebuild-ehrbase: ${{ steps.strategy.outputs.rebuild }}
       trigger-source: ${{ steps.strategy.outputs.source }}
       extension-branch: ${{ steps.config.outputs.extension-branch }}
+      extension-repo: ${{ steps.config.outputs.extension-repo }}
     steps:
       - name: Determine Strategy
         id: strategy
@@ -58,12 +60,15 @@ jobs:
             echo "source=ehrbase-changed" >> $GITHUB_OUTPUT
           fi
 
-      - name: Set Extension Branch
+      - name: Set Extension Config
         id: config
         run: |
           BRANCH="${{ github.event.inputs.extension_branch || env.PLUGIN_BRANCH }}"
+          REPO="${{ github.event.inputs.extension_repo || env.PLUGIN_REPO }}"
           echo "extension-branch=${BRANCH}" >> $GITHUB_OUTPUT
+          echo "extension-repo=${REPO}" >> $GITHUB_OUTPUT
           echo "Using extension branch: ${BRANCH}"
+          echo "Using extension repository: ${REPO}"
 
   # EHRBASE BUILD JOBS
   build-ehrbase:
@@ -88,9 +93,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.m2/repository
-          key: deps-${{ runner.os }}-m2-${{ github.head_ref }}-${{ hashFiles('**/pom.xml') }}
+          key: deps-${{ runner.os }}-m2-${{ github.ref_name }}-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
-            deps-${{ runner.os }}-m2-${{ github.head_ref }}-
+            deps-${{ runner.os }}-m2-${{ github.ref_name }}-
             deps-${{ runner.os }}-m2-
             deps-${{ runner.os }}-
             deps-
@@ -226,9 +231,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.m2/repository
-          key: deps-${{ runner.os }}-m2-${{ github.head_ref }}-${{ hashFiles('**/pom.xml') }}
+          key: deps-${{ runner.os }}-m2-${{ github.ref_name }}-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
-            deps-${{ runner.os }}-m2-${{ github.head_ref }}-
+            deps-${{ runner.os }}-m2-${{ github.ref_name }}-
             deps-${{ runner.os }}-m2-
             deps-${{ runner.os }}-
             deps-
@@ -309,7 +314,7 @@ jobs:
       - name: Checkout ehrbase-extension
         uses: actions/checkout@v4
         with:
-          repository: ${{ env.PLUGIN_REPO }}
+          repository: ${{ needs.determine-build-strategy.outputs.extension-repo }}
           path: ehrbase-extension
           ref: ${{ needs.determine-build-strategy.outputs.extension-branch }}
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -325,9 +330,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.m2/repository
-          key: deps-${{ runner.os }}-plugins-${{ needs.determine-build-strategy.outputs.extension-branch }}-${{ hashFiles('ehrbase-extension/**/pom.xml') }}
+          key: deps-${{ runner.os }}-plugins-${{ github.ref_name }}-${{ hashFiles('ehrbase-extension/**/pom.xml') }}
           restore-keys: |
-            deps-${{ runner.os }}-plugins-${{ needs.determine-build-strategy.outputs.extension-branch }}-
+            deps-${{ runner.os }}-plugins-${{ github.ref_name }}-
             deps-${{ runner.os }}-plugins-
 
       - name: Build Plugins
@@ -439,7 +444,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ehrbase-jar
-          path: $(dirname ${{ env.JAR_PATH }})
+          path: ${{ env.JAR_DIR }}
 
       - name: Download Plugin JARs (from current workflow)
         if: needs.get-latest-plugins.outputs.plugins-available != 'true'
