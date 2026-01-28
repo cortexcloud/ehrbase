@@ -84,7 +84,7 @@ public final class SecurityConfigOAuth2 extends SecurityConfig {
                             .permitAll();
 
                     // Permit welcome page and img
-                    auth.requestMatchers("/", "/img/**").permitAll();
+                    auth.requestMatchers(antMatcher("/"), antMatcher("/img/**")).permitAll();
 
                     // secure /rest/admin/** so that only admins can access it
                     auth = auth.requestMatchers(antMatcher("/rest/admin/**")).hasRole(adminRole);
