@@ -28,6 +28,7 @@ import org.springframework.cache.Cache;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
@@ -56,6 +57,7 @@ public class UserServiceImp implements UserService {
      * @return UUID of default user, derived from authenticated user.
      */
     @Override
+    @Transactional
     public UUID getCurrentUserId() {
         String key = authenticationFacade.getAuthentication().getName();
         try {
